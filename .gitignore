@@ -210,3 +210,4 @@ __marimo__/
 train_data
 test_data
 *.pth
+src/train_data_cache.json

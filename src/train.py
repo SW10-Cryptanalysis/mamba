@@ -14,33 +14,42 @@ PLAIN_VOCAB = 26
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
         self.max_seq_len = max_seq_len
-        files = [os.path.join(directory_path, f) for f in os.listdir(directory_path) if f.endswith(".json")]
-        worker_args = [(f, max_seq_len) for f in files]
-        with ProcessPoolExecutor() as executor:
-            results = list(tqdm(executor.map(encode_file, worker_args), total=len(files), desc="Encoding Data"))
+        self.file_paths = [
+            os.path.join(directory_path, f) 
+            for f in os.listdir(directory_path) if f.endswith(".json")
+        ]
         
-        # Filter and Unpack
-        valid_results = [r for r in results if r is not None]
-        cipher_lists, plain_lists = zip(*valid_results)
+        self.mapping = {chr(i + 97): i for i in range(26)}
 
-        # NOW convert to tensors in the main process
-        print("Converting to tensors...")
-        self.cipher_data = torch.tensor(cipher_lists, dtype=torch.long)
-        self.plain_data = torch.tensor(plain_lists, dtype=torch.long)
-
-    def _pad_truncate(self, tensor):
-        if len(tensor) > self.max_seq_len:
-            return tensor[:self.max_seq_len]
-        elif len(tensor) < self.max_seq_len:
-            padding = torch.zeros(self.max_seq_len - len(tensor), dtype=torch.long)
-            return torch.cat([tensor, padding])
-        return tensor
+    def _pad_trunc(self, list_data):
+        if len(list_data) > self.max_seq_len:
+            return list_data[:self.max_seq_len]
+        return list_data + [0] * (self.max_seq_len - len(list_data))
 
     def __len__(self):
-        return len(self.cipher_data)
+        return len(self.file_paths)
 
     def __getitem__(self, idx):
-        return self.cipher_data[idx], self.plain_data[idx]
+        filepath = self.file_paths[idx]
+        
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            
+            ciphertext = data["recurrence_encoding"]
+            if isinstance(ciphertext, str):
+                ciphertext = [int(x) for x in ciphertext.split()]
+            
+            plaintext = data["plaintext"]
+            encoded_plain = [self.mapping[c] for c in plaintext.lower() if c in self.mapping]
+            
+            cipher_tensor = torch.tensor(self._pad_trunc(ciphertext), dtype=torch.long)
+            plain_tensor = torch.tensor(self._pad_trunc(encoded_plain), dtype=torch.long)
+            
+            return cipher_tensor, plain_tensor
+            
+        except Exception as e:
+            return torch.zeros(self.max_seq_len, dtype=torch.long), torch.zeros(self.max_seq_len, dtype=torch.long)
 
 def process_json(filepath):
     try:
@@ -51,55 +60,39 @@ def process_json(filepath):
         return 0, 0
 
 def get_max_stats(directory_path):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_path = os.path.join(current_dir, "train_data_cache.json")
+    
+    if os.path.exists(cache_path):
+        folder_mod_time = os.path.getmtime(directory_path)
+        cache_mod_time = os.path.getmtime(cache_path)
+        
+        if cache_mod_time > folder_mod_time:
+            print(f"Loading stats from cache...")
+            with open(cache_path, 'r') as f:
+                cache = json.load(f)
+            return cache["max_length"], cache["max_symbols"]
+        else:
+            print("Training data has changed. Re-scanning...")
+    else:
+        print("No cache found. Scanning files...")
+
     files = [os.path.join(directory_path, f) for f in os.listdir(directory_path) if f.endswith(".json")]
     
     max_length = 0
     max_symbols = 0
     
-    # Use ProcessPoolExecutor to run across all CPU cores
     with ProcessPoolExecutor() as executor:
         results = list(tqdm(executor.map(process_json, files), total=len(files), desc="Scanning Files"))
         
     for length, symbols in results:
         if length > max_length: max_length = length
         if symbols > max_symbols: max_symbols = symbols
+    
+    with open(cache_path, 'w') as f:
+        json.dump({"max_length": max_length, "max_symbols": max_symbols}, f, indent=4)
             
-    print(f"Max length: {max_length}, Cipher vocab: {max_symbols}") 
     return max_length, max_symbols
-
-def encode_file(args):
-    filepath, max_seq_len = args
-    try:
-        with open(filepath, 'r') as f:
-            data = json.load(f)
-        
-        ciphertext = data["recurrence_encoding"]
-        if isinstance(ciphertext, str):
-            ciphertext = [int(x) for x in ciphertext.split()]
-        
-        mapping = {chr(i + 97): i for i in range(26)}
-        encoded_plain = [mapping[c] for c in data["plaintext"].lower() if c in mapping]
-        
-        def pad_trunc(list_data, max_len):
-            if len(list_data) > max_len: return list_data[:max_len]
-            return list_data + [0] * (max_len - len(list_data))
-
-        return (
-            pad_trunc(ciphertext, max_seq_len),
-            pad_trunc(encoded_plain, max_seq_len)
-        )
-    except Exception as e:
-        print(f"\nWorker Error on {os.path.basename(filepath)}: {e}")
-        return None
-
-def encode_plaintext(text):
-    mapping = {chr(i + 97): i for i in range(26)}
-    encoded = []
-    for char in text.lower():
-        if char in mapping:
-            encoded.append(mapping[char])
-            
-    return encoded
 
 class MambaCipherSolver(nn.Module):
     def __init__(self, vocab_cipher_size, vocab_plain_size, d_model=128, n_layers=4):
@@ -163,14 +156,16 @@ def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/m
     print(f"Finished Training. Model saved to {save_path}")
 
 if __name__ == "__main__":
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    train_path = os.path.join(base_dir, "train_data")
 
-    train_folder_path = "./src/train_data" 
-
-    max_len, cipher_vocab = get_max_stats(train_folder_path)
+    max_len, cipher_vocab = get_max_stats(train_path)
     if max_len == 0:
-        raise ValueError(f"No valid JSON data found in {train_folder_path}.")
-    dataset = CipherDataset(train_folder_path, max_seq_len=max_len)
-    loader = DataLoader(dataset, batch_size=16, shuffle=True)
+        raise ValueError(f"No valid JSON data found in {train_path}.")
+    dataset = CipherDataset(train_path, max_seq_len=max_len)
+    cores = os.cpu_count() or 1
+    num_workers = max(1, cores // 2)
+    loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=4)
 
     model = MambaCipherSolver(
         vocab_cipher_size=cipher_vocab+1, 
