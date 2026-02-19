@@ -240,6 +240,7 @@ dependencies = [
     { name = "causal-conv1d" },
     { name = "mamba-ssm", extra = ["dev"] },
     { name = "torch" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -247,6 +248,7 @@ requires-dist = [
     { name = "causal-conv1d", specifier = ">=1.6.0" },
     { name = "mamba-ssm", extras = ["dev"], specifier = ">=2.3.0" },
     { name = "torch", specifier = ">=2.10.0" },
+    { name = "tqdm", specifier = ">=4.67.3" },
 ]
 
 [[package]]

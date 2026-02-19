@@ -8,4 +8,5 @@ dependencies = [
     "causal-conv1d>=1.6.0",
     "mamba-ssm[dev]>=2.3.0",
     "torch>=2.10.0",
+    "tqdm>=4.67.3",
 ]
