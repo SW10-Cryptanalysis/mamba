@@ -222,6 +222,7 @@ name = "mamba"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "numpy", marker = "sys_platform == 'linux'" },
     { name = "torch", marker = "sys_platform == 'linux'" },
     { name = "tqdm", marker = "sys_platform == 'linux'" },
 ]
@@ -229,7 +230,7 @@ dependencies = [
 [package.optional-dependencies]
 gpu = [
     { name = "causal-conv1d", marker = "sys_platform == 'linux'" },
-    { name = "mamba-ssm", extra = ["dev"], marker = "sys_platform == 'linux'" },
+    { name = "mamba-ssm", marker = "sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
@@ -241,7 +242,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "causal-conv1d", marker = "extra == 'gpu'", specifier = ">=1.6.0" },
-    { name = "mamba-ssm", extras = ["dev"], marker = "extra == 'gpu'", specifier = ">=2.3.0" },
+    { name = "mamba-ssm", marker = "extra == 'gpu'", specifier = ">=2.3.0" },
+    { name = "numpy" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
@@ -267,11 +269,6 @@ dependencies = [
     { name = "triton", marker = "sys_platform == 'linux'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/54/69/a87f06d9dba78c041adb81f2228e978aab179477c64f1a210c0fe0d63e8d/mamba_ssm-2.3.0.tar.gz", hash = "sha256:8294e12125f76021e4e190f4137e84a84935920eeda5d0037a6917524456b303", size = 121116, upload-time = "2026-01-12T17:07:22.152Z" }
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest", marker = "sys_platform == 'linux'" },
-]
 
 [[package]]
 name = "markdown-it-py"
