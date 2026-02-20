@@ -1,0 +1,31 @@
+[project]
+name = "mamba"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.10.0",
+    "tqdm>=4.67.3",
+    "numpy",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "causal-conv1d>=1.6.0",
+    "mamba-ssm>=2.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["test"]
+norecursedirs = ["train_data"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
