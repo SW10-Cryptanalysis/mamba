@@ -222,10 +222,14 @@ name = "mamba"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "causal-conv1d", marker = "sys_platform == 'linux'" },
-    { name = "mamba-ssm", extra = ["dev"], marker = "sys_platform == 'linux'" },
     { name = "torch", marker = "sys_platform == 'linux'" },
     { name = "tqdm", marker = "sys_platform == 'linux'" },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "causal-conv1d", marker = "sys_platform == 'linux'" },
+    { name = "mamba-ssm", extra = ["dev"], marker = "sys_platform == 'linux'" },
 ]
 
 [package.dev-dependencies]
@@ -236,11 +240,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "causal-conv1d", specifier = ">=1.6.0" },
-    { name = "mamba-ssm", extras = ["dev"], specifier = ">=2.3.0" },
+    { name = "causal-conv1d", marker = "extra == 'gpu'", specifier = ">=1.6.0" },
+    { name = "mamba-ssm", extras = ["dev"], marker = "extra == 'gpu'", specifier = ">=2.3.0" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
+provides-extras = ["gpu"]
 
 [package.metadata.requires-dev]
 dev = [

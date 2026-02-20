@@ -26,9 +26,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system torch==2.5.0 --index-url https://download.pytorch.org/whl/cpu
-          uv pip install --system --no-build causal-conv1d==1.6.0 mamba-ssm==2.3.0 --find-links https://github.com/state-spaces/mamba/releases/tag/v2.2.2
-          uv pip install --system -e . 
+          uv sync --system
 
       - name: Run Pytest
         run: pytest

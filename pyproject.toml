@@ -5,10 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "causal-conv1d>=1.6.0",
-    "mamba-ssm[dev]>=2.3.0",
     "torch>=2.10.0",
     "tqdm>=4.67.3",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "causal-conv1d>=1.6.0",
+    "mamba-ssm[dev]>=2.3.0",
 ]
 
 [dependency-groups]
