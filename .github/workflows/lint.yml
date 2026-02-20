@@ -23,5 +23,5 @@ jobs:
 
       - name: Run Ruff Linter
         run: |
-          uv pip install ruff
+          uv pip install --system ruff
           uv run ruff check .

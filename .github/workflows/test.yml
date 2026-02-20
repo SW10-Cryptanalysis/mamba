@@ -23,8 +23,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install causal-conv1d mamba-ssm --find-links https://github.com/state-spaces/mamba/releases/tag/v2.2.4
-          uv sync --no-build-package causal-conv1d --no-build-package mamba-ssm
+          uv pip install --system causal-conv1d mamba-ssm --find-links https://github.com/state-spaces/mamba/releases/tag/v2.2.4
+          uv sync --system --no-build-package causal-conv1d --no-build-package mamba-ssm
 
       - name: Run Pytest
         run: uv run pytest
