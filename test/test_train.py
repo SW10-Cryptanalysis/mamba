@@ -1,7 +1,7 @@
 import os
 import json
 from unittest.mock import mock_open, patch
-from src.train import process_json, CipherDataset, get_max_stats
+from src.train import process_json, CipherDataset
 
 def test_process_json_list_input():
     """Verify it handles 'recurrence_encoding' as a list of integers."""
