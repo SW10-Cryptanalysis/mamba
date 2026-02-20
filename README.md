@@ -1,2 +1,16 @@
-# mamba
-Mamba
+# Mamba
+
+#### Run ```uv sync``` to install necessary packages. 
+#### Must be run in Linux environment
+#### To train model: 
+``` shell
+uv run -m src.train
+```
+#### To test model: 
+``` shell
+uv run -m src.eval
+```
+#### To run tests model: 
+``` shell
+uv run pytest
+```

@@ -1,15 +1,21 @@
 import os
 import json
+from unittest.mock import mock_open, patch
 from src.train import process_json, CipherDataset, get_max_stats
 
-def test_process_json(tmp_path):
-    """Verify that process_json correctly extracts stats from a dummy file."""
-    d = tmp_path / "test.json"
-    d.write_text(json.dumps({"length": 100, "num_symbols": 50}))
+def test_process_json_list_input():
+    """Verify it handles 'recurrence_encoding' as a list of integers."""
+    mock_data = {
+        "recurrence_encoding": [1, 5, 10, 2],
+        "length": 4
+    }
+    mock_json = json.dumps(mock_data)
     
-    length, symbols = process_json(str(d))
-    assert length == 100
-    assert symbols == 50
+    with patch("builtins.open", mock_open(read_data=mock_json)):
+        length, max_val = process_json("fake_path.json")
+        
+    assert length == 4
+    assert max_val == 10
 
 def test_cipher_dataset_padding():
     """Verify that the dataset correctly pads and truncates tensors."""
@@ -32,14 +38,3 @@ def test_cipher_dataset_padding():
 
     os.remove(file_path)
     os.rmdir(temp_dir)
-
-def test_get_max_stats_cache(tmp_path):
-    """Verify that get_max_stats creates a cache file."""
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    (data_dir / "1.json").write_text(json.dumps({"length": 10, "num_symbols": 5}))
-    
-    max_len, max_sym = get_max_stats(str(data_dir))
-    
-    assert max_len == 10
-    assert max_sym == 5

@@ -56,45 +56,47 @@ def process_json(filepath):
     try:
         with open(filepath, 'r') as f:
             data = json.load(f)
-        return data.get("length", 0), data.get("num_symbols", 0)
+        
+        ciphertext = data.get("recurrence_encoding", [])
+        if isinstance(ciphertext, str):
+            ciphertext = [int(x) for x in ciphertext.split()]
+        
+        actual_max_val = max(ciphertext) if ciphertext else 0
+        actual_len = len(ciphertext)
+        
+        return actual_len, actual_max_val
     except Exception:
         return 0, 0
 
 def get_max_stats(directory_path):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    cache_path = os.path.join(current_dir, "train_data_cache.json")
+    print(f"Scanning directory: {directory_path}...")
     
-    if os.path.exists(cache_path):
-        folder_mod_time = os.path.getmtime(directory_path)
-        cache_mod_time = os.path.getmtime(cache_path)
-        
-        if cache_mod_time > folder_mod_time:
-            print("Loading stats from cache...")
-            with open(cache_path, 'r') as f:
-                cache = json.load(f)
-            return cache["max_length"], cache["max_symbols"]
-        else:
-            print("Training data has changed. Re-scanning...")
-    else:
-        print("No cache found. Scanning files...")
+    files = [
+        os.path.join(directory_path, f) 
+        for f in os.listdir(directory_path) if f.endswith(".json")
+    ]
+    
+    if not files:
+        print("Warning: No JSON files found in the directory.")
+        return 0, 0
 
-    files = [os.path.join(directory_path, f) for f in os.listdir(directory_path) if f.endswith(".json")]
-    
     max_length = 0
     max_symbols = 0
     
     with ProcessPoolExecutor() as executor:
-        results = list(tqdm(executor.map(process_json, files), total=len(files), desc="Scanning Files"))
+        results = list(tqdm(
+            executor.map(process_json, files), 
+            total=len(files), 
+            desc="Analyzing Dataset Dimensions"
+        ))
         
     for length, symbols in results:
         if length > max_length: 
             max_length = length
         if symbols > max_symbols: 
             max_symbols = symbols
-    
-    with open(cache_path, 'w') as f:
-        json.dump({"max_length": max_length, "max_symbols": max_symbols}, f, indent=4)
             
+    print(f"Scan complete. Max Seq Len: {max_length}, Highest Symbol ID: {max_symbols}")
     return max_length, max_symbols
 
 class MambaCipherSolver(nn.Module):
@@ -135,6 +137,8 @@ def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/m
             cipher, plain = cipher.to("cuda"), plain.to("cuda")
             
             optimizer.zero_grad()
+            if cipher.max() >= model.embedding.num_embeddings:
+                print(f"ERROR: Found index {cipher.max().item()} but vocab size is {model.embedding.num_embeddings}")
             outputs = model(cipher)
             
             loss = criterion(outputs.view(-1, PLAIN_VOCAB), plain.view(-1))
