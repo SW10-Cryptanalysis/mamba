@@ -4,9 +4,9 @@ from unittest.mock import mock_open, patch
 from src.train import process_json, CipherDataset
 
 def test_process_json_list_input():
-    """Verify it handles 'recurrence_encoding' as a list of integers."""
+    """Verify it handles 'ciphertext' as a list of integers."""
     mock_data = {
-        "recurrence_encoding": [1, 5, 10, 2],
+        "ciphertext": [1, 5, 10, 2],
         "length": 4
     }
     mock_json = json.dumps(mock_data)
@@ -25,7 +25,7 @@ def test_cipher_dataset_padding():
     
     with open(file_path, "w") as f:
         json.dump({
-            "recurrence_encoding": "1 2 3",
+            "ciphertext": "1 2 3",
             "plaintext": "abc"
         }, f)
 

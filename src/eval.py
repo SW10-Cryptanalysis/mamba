@@ -43,7 +43,7 @@ def test_model(test_dir, model_path="./src/mamba_cipher_model.pth"):
                 with open(filepath, 'r') as f:
                     data = json.load(f)
                     
-                raw_cipher = data["recurrence_encoding"]
+                raw_cipher = data["ciphertext"]
                 if isinstance(raw_cipher, str):
                     raw_cipher = [int(x) for x in raw_cipher.split()]
 

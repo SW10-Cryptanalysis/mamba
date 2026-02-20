@@ -37,7 +37,7 @@ class CipherDataset(Dataset):
             with open(filepath, 'r') as f:
                 data = json.load(f)
             
-            ciphertext = data["recurrence_encoding"]
+            ciphertext = data["ciphertext"]
             if isinstance(ciphertext, str):
                 ciphertext = [int(x) for x in ciphertext.split()]
             
@@ -57,7 +57,7 @@ def process_json(filepath):
         with open(filepath, 'r') as f:
             data = json.load(f)
         
-        ciphertext = data.get("recurrence_encoding", [])
+        ciphertext = data.get("ciphertext", [])
         if isinstance(ciphertext, str):
             ciphertext = [int(x) for x in ciphertext.split()]
         
