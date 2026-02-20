@@ -10,8 +10,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      CAUSAL_CONV1D_SKIP_CUDA_BUILD: "TRUE"
-      MAMBA_SKIP_CUDA_BUILD: "TRUE"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --system
+          uv sync
 
       - name: Run Pytest
-        run: pytest
+        run: uv run pytest

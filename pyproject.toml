@@ -12,7 +12,7 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "causal-conv1d>=1.6.0",
-    "mamba-ssm[dev]>=2.3.0",
+    "mamba-ssm>=2.3.0",
 ]
 
 [dependency-groups]

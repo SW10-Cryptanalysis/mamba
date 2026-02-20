@@ -1,6 +1,6 @@
 # Mamba
 
-#### Run ```uv sync --extra gpu``` to install necessary packages. 
+#### Run ```uv sync --all-extras``` to install necessary packages. 
 #### Must be run in Linux environment
 #### To train model: 
 ``` shell
