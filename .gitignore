@@ -208,6 +208,6 @@ __marimo__/
 
 .vscode
 train_data
-test_data
+eval_data
 *.pth
 src/train_data_cache.json

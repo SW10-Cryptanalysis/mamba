@@ -10,3 +10,17 @@ dependencies = [
     "torch>=2.10.0",
     "tqdm>=4.67.3",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["test"]
+norecursedirs = ["train_data"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]

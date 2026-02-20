@@ -10,6 +10,7 @@ import json
 from tqdm import tqdm
 
 PLAIN_VOCAB = 26
+TRAIN_DATA_DIR = "train_data"
 
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
@@ -48,7 +49,7 @@ class CipherDataset(Dataset):
             
             return cipher_tensor, plain_tensor
             
-        except Exception as e:
+        except Exception:
             return torch.zeros(self.max_seq_len, dtype=torch.long), torch.zeros(self.max_seq_len, dtype=torch.long)
 
 def process_json(filepath):
@@ -68,7 +69,7 @@ def get_max_stats(directory_path):
         cache_mod_time = os.path.getmtime(cache_path)
         
         if cache_mod_time > folder_mod_time:
-            print(f"Loading stats from cache...")
+            print("Loading stats from cache...")
             with open(cache_path, 'r') as f:
                 cache = json.load(f)
             return cache["max_length"], cache["max_symbols"]
@@ -86,8 +87,10 @@ def get_max_stats(directory_path):
         results = list(tqdm(executor.map(process_json, files), total=len(files), desc="Scanning Files"))
         
     for length, symbols in results:
-        if length > max_length: max_length = length
-        if symbols > max_symbols: max_symbols = symbols
+        if length > max_length: 
+            max_length = length
+        if symbols > max_symbols: 
+            max_symbols = symbols
     
     with open(cache_path, 'w') as f:
         json.dump({"max_length": max_length, "max_symbols": max_symbols}, f, indent=4)
@@ -157,7 +160,7 @@ def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/m
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    train_path = os.path.join(base_dir, "train_data")
+    train_path = os.path.join(base_dir, TRAIN_DATA_DIR)
 
     max_len, cipher_vocab = get_max_stats(train_path)
     if max_len == 0:
@@ -173,5 +176,5 @@ if __name__ == "__main__":
         d_model=128
     ).to("cuda")
 
-    print(f"Training...")
+    print("Training...")
     train_model(model, loader, cipher_vocab+1, epochs=10)
