@@ -23,14 +23,22 @@ jobs:
 
       - name: Upgrade setuptools and pip
         run: uv pip install --system --upgrade "setuptools>=70.1" "pip>=24.0"
-      
+
       - name: Install numpy first
         run: uv pip install --system numpy
-      
-      - name: Install dependencies
+
+      - name: Install PyTorch and CUDA-dependent packages
+        run: uv pip install --system --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+      - name: Install mamba dependencies with pre-built wheels
         run: |
-          uv pip install --system causal-conv1d mamba-ssm --find-links https://github.com/state-spaces/mamba/releases/tag/v2.2.4
-          uv pip install --system -e .
+          uv pip install --system \
+            --find-links https://github.com/state-spaces/mamba/releases/tag/v2.2.4 \
+            --no-build-isolation \
+            causal-conv1d mamba-ssm
+
+      - name: Install project dependencies
+        run: uv pip install --system -e .
 
       - name: Run Pytest
         run: uv run pytest
