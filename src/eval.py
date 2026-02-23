@@ -3,6 +3,7 @@ import os
 import json
 import torch
 import argparse
+import zipfile
 from src.train import MambaCipherSolver
 from src.config import Config
 
@@ -47,40 +48,74 @@ def test_model(test_dir, model_path=None):
     model = MambaCipherSolver(cipher_vocab, config.plain_vocab_size).to("cuda")
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
-    results = {}
+    results = {
+        "model_path": model_path,
+        "predictions": []
+    }
     
     if not os.path.exists(test_dir):
         print(f"Error: {test_dir} not found.")
         return
 
-    print("Testing files...")
+    test_samples = []
+    with os.scandir(test_dir) as entries:
+        for entry in entries:
+            if entry.is_file():
+                if entry.name.endswith(".json"):
+                    test_samples.append((entry.path, None))
+                elif entry.name.endswith(".zip"):
+                    with zipfile.ZipFile(entry.path, 'r') as z:
+                        for name in z.namelist():
+                            if name.endswith(".json"):
+                                test_samples.append((entry.path, name))
+    
+    print(f"Testing {len(test_samples)} files...")
     
     with torch.no_grad():
-        for filename in sorted(os.listdir(test_dir)):
-            if filename.endswith(".json"):
-                filepath = os.path.join(test_dir, filename)
-                
-                with open(filepath, 'r') as f:
+        for path, internal_name in test_samples:
+            if internal_name:
+                with zipfile.ZipFile(path, 'r') as z:
+                    with z.open(internal_name) as f:
+                        data = json.load(f)
+                filename = f"{os.path.basename(path)}/{internal_name}"
+            else:
+                with open(path, 'r') as f:
                     data = json.load(f)
-                    
-                raw_cipher = data["ciphertext"]
-                if isinstance(raw_cipher, str):
-                    raw_cipher = [int(x) for x in raw_cipher.split()]
+                filename = os.path.basename(path)
 
-                input_tensor = torch.tensor(raw_cipher, dtype=torch.long).unsqueeze(0).to("cuda")
-                
-                logits = model(input_tensor)
-                pred_indices = torch.argmax(logits, dim=-1).squeeze().tolist()
-                
-                if isinstance(pred_indices, int):
-                    pred_indices = [pred_indices]
-                
-                deciphered_text = decode_plain(pred_indices)
-                results[filename] = deciphered_text
-                plaintext = data["plaintext"]
-                symbol_err_rate = ser(deciphered_text, plaintext)
-                
-                print(f"File: {filename} | SER: {symbol_err_rate} | Predicted: {deciphered_text}")
+            raw_cipher = data["ciphertext"]
+            if isinstance(raw_cipher, str):
+                raw_cipher = [int(x) for x in raw_cipher.split()]
+
+            input_tensor = torch.tensor(raw_cipher, dtype=torch.long).unsqueeze(0).to("cuda")
+            
+            logits = model(input_tensor)
+            pred_indices = torch.argmax(logits, dim=-1).squeeze().tolist()
+            
+            if isinstance(pred_indices, int):
+                pred_indices = [pred_indices]
+            
+            deciphered_text = decode_plain(pred_indices)
+            plaintext = data["plaintext"]
+            symbol_err_rate = ser(deciphered_text, plaintext)
+            
+            results["predictions"].append({
+                "filename": filename,
+                "ground_truth": plaintext,
+                "predicted": deciphered_text,
+                "ser": symbol_err_rate
+            })
+            print(f"File: {filename} | SER: {symbol_err_rate} | Predicted: {deciphered_text}")
+    
+    full_model_name = os.path.splitext(os.path.basename(model_path))[0]
+    if "_" in full_model_name:
+        identifier = full_model_name.split("_")[-1]
+    else:
+        identifier = full_model_name
+    output_filename = os.path.join(config.save_path, f"eval_{identifier}.json")
+    with open(output_filename, 'w') as f:
+        json.dump(results, f, indent=4)
+    print(f"\nResults saved to {output_filename}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Mamba Cipher Model")

@@ -14,6 +14,8 @@ from src.config import Config
 
 config = Config()
 
+import zipfile
+
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
         self.max_seq_len = max_seq_len
@@ -21,9 +23,15 @@ class CipherDataset(Dataset):
         
         print(f"Loading file paths from {directory_path}...")
         with os.scandir(directory_path) as entries:
-            for entry in tqdm(entries, desc="Indexing files", unit="file", leave=False):
-                if entry.is_file() and entry.name.endswith(".json"):
-                    self.file_paths.append(entry.path)
+            for entry in tqdm(entries, desc="Scanning for JSON/ZIP", leave=False):
+                if entry.is_file():
+                    if entry.name.endswith(".json"):
+                        self.file_paths.append((entry.path, None))
+                    elif entry.name.endswith(".zip"):
+                        with zipfile.ZipFile(entry.path, 'r') as z:
+                            for file_info in z.infolist():
+                                if file_info.filename.endswith(".json"):
+                                    self.file_paths.append((entry.path, file_info.filename))
         
         print(f"Successfully indexed {len(self.file_paths)} files.")
         self.mapping = {chr(i + 97): i for i in range(26)}
@@ -37,10 +45,17 @@ class CipherDataset(Dataset):
         return len(self.file_paths)
 
     def __getitem__(self, idx):
-        filepath = self.file_paths[idx]
+        path, internal_name = self.file_paths[idx]
+        
         try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
+            if internal_name:
+                with zipfile.ZipFile(path, 'r') as z:
+                    with z.open(internal_name) as f:
+                        data = json.load(f)
+            else:
+                with open(path, 'r') as f:
+                    data = json.load(f)
+            
             ciphertext = data["ciphertext"]
             if isinstance(ciphertext, str):
                 ciphertext = [int(x) for x in ciphertext.split()]
@@ -217,7 +232,7 @@ if __name__ == "__main__":
         n_layers=config.n_layers
     ).to("cuda")
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+    timestamp = datetime.now().strftime("%m%d-%H%M")
     os.makedirs(config.save_path, exist_ok=True)
     config_filename = os.path.join(config.save_path, f"config_{timestamp}.json")
     with open(config_filename, 'w') as f:
