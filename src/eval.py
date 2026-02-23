@@ -40,7 +40,7 @@ def test_model(test_dir, model_path=None):
     checkpoint = torch.load(model_path, map_location="cuda")
 
     if isinstance(config.unique_homophones, int):
-        cipher_vocab = config.unique_homophones + 1
+        cipher_vocab = config.unique_homophones + config.buffer
     else:
         cipher_vocab = checkpoint['cipher_vocab']
 

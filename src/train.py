@@ -182,7 +182,7 @@ if __name__ == "__main__":
     loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, num_workers=num_workers)
 
     model = MambaCipherSolver(
-        vocab_cipher_size=cipher_vocab+1, 
+        vocab_cipher_size=cipher_vocab+config.buffer, 
         vocab_plain_size=config.plain_vocab_size,
         d_model=config.d_model,
         n_layers=config.n_layers
@@ -196,4 +196,4 @@ if __name__ == "__main__":
     filename = f"mamba2_{timestamp}.pth"
 
     print("Training...")
-    train_model(model, loader, cipher_vocab+1, epochs=config.epochs, save_path=os.path.join(config.save_path, filename))
+    train_model(model, loader, cipher_vocab+config.buffer, epochs=config.epochs, save_path=os.path.join(config.save_path, filename))
