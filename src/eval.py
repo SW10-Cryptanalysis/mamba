@@ -1,9 +1,12 @@
+import glob
 import os
 import json
 import torch
-from src.train import PLAIN_VOCAB, MambaCipherSolver
+import argparse
+from src.train import MambaCipherSolver
+from src.config import Config
 
-TEST_DATA_DIR = "eval_data"
+config = Config()
 
 def decode_plain(indices):
     """Converts list of integers (0-25) back into a string (a-z)."""
@@ -13,18 +16,35 @@ def decode_plain(indices):
 def ser(pred, plaintext):
     if len(plaintext) == 0:
         return 0.0
-    count = 0
-    for i in range(len(plaintext)):
-        if pred[i] == plaintext[i]:
-            count += 1
+    count = sum(1 for p, t in zip(pred, plaintext) if p == t)
     return 1.0 - (count / len(plaintext))
 
-def test_model(test_dir, model_path="./src/mamba_cipher_model.pth"):
+def test_model(test_dir, model_path=None):
+    if model_path is None:
+        list_of_files = glob.glob(os.path.join(config.save_path, "*.pth"))
+        if not list_of_files:
+            print(f"Error: No models found in {config.save_path}")
+            return None
+        model_path = max(list_of_files, key=os.path.getctime)
+    
+    if not os.path.exists(model_path):
+        alternative_path = os.path.join(config.save_path, model_path)
+        if os.path.exists(alternative_path):
+            model_path = alternative_path
+        else:
+            print(f"Error: Could not find model at {model_path}")
+            return None
+
+    print(f"Testing model: {model_path}")
+
     checkpoint = torch.load(model_path, map_location="cuda")
 
-    cipher_vocab = checkpoint['cipher_vocab']
+    if isinstance(config.unique_homophones, int):
+        cipher_vocab = config.unique_homophones + config.buffer
+    else:
+        cipher_vocab = checkpoint['cipher_vocab']
 
-    model = MambaCipherSolver(cipher_vocab, PLAIN_VOCAB).to("cuda")
+    model = MambaCipherSolver(cipher_vocab, config.plain_vocab_size).to("cuda")
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     results = {}
@@ -60,13 +80,18 @@ def test_model(test_dir, model_path="./src/mamba_cipher_model.pth"):
                 plaintext = data["plaintext"]
                 symbol_err_rate = ser(deciphered_text, plaintext)
                 
-                print(f"File: {filename} | Predicted: {deciphered_text}")
-
-    return symbol_err_rate
+                print(f"File: {filename} | SER: {symbol_err_rate} | Predicted: {deciphered_text}")
 
 if __name__ == "__main__":
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    test_folder = os.path.join(base_dir, TEST_DATA_DIR)
+    parser = argparse.ArgumentParser(description="Evaluate a Mamba Cipher Model")
+    parser.add_argument(
+        "model_name", 
+        nargs="?", 
+        default=None, 
+        help="Name of the .pth model file (defaults to latest in output dir)"
+    )
+    args = parser.parse_args()
+
+    m_path = os.path.join(config.save_path, args.model_name) if args.model_name else None
     
-    symbol_err_rate = test_model(test_folder)
-    print(f"Symbol error rate: {symbol_err_rate}")
+    test_model(config.eval_data_dir, model_path=m_path)

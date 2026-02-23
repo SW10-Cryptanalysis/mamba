@@ -210,4 +210,4 @@ __marimo__/
 train_data
 eval_data
 *.pth
-src/train_data_cache.json
+outputs

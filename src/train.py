@@ -8,9 +8,11 @@ from mamba_ssm.ops.triton.layer_norm import RMSNorm
 import os
 import json
 from tqdm import tqdm
+from datetime import datetime
+from dataclasses import asdict
+from src.config import Config
 
-PLAIN_VOCAB = 26
-TRAIN_DATA_DIR = "train_data"
+config = Config()
 
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
@@ -100,14 +102,14 @@ def get_max_stats(directory_path):
     return max_length, max_symbols
 
 class MambaCipherSolver(nn.Module):
-    def __init__(self, vocab_cipher_size, vocab_plain_size, d_model=128, n_layers=4):
+    def __init__(self, vocab_cipher_size, vocab_plain_size=26, d_model=128, n_layers=4):
         super().__init__()
         self.embedding = nn.Embedding(vocab_cipher_size, d_model)
         
         self.layers = nn.ModuleList([
             nn.ModuleDict({
                 "norm": RMSNorm(d_model), 
-                "mixer": Mamba2(d_model=d_model, d_state=64, d_conv=4, expand=2)
+                "mixer": Mamba2(d_model=d_model, d_state=config.d_state, d_conv=config.d_conv, expand=config.expand)
             }) for _ in range(n_layers)
         ])
         
@@ -124,9 +126,9 @@ class MambaCipherSolver(nn.Module):
         x = self.norm_f(x)
         return self.lm_head(x)
 
-def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/mamba_cipher_model.pth"):
+def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./outputs/mamba_cipher_model.pth"):
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
     
     model.train()
     for epoch in range(epochs):
@@ -141,7 +143,7 @@ def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/m
                 print(f"ERROR: Found index {cipher.max().item()} but vocab size is {model.embedding.num_embeddings}")
             outputs = model(cipher)
             
-            loss = criterion(outputs.view(-1, PLAIN_VOCAB), plain.view(-1))
+            loss = criterion(outputs.view(-1, config.plain_vocab_size), plain.view(-1))
             
             loss.backward()
             optimizer.step()
@@ -163,22 +165,35 @@ def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./src/m
     print(f"Finished Training. Model saved to {save_path}")
 
 if __name__ == "__main__":
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    train_path = os.path.join(base_dir, TRAIN_DATA_DIR)
+    train_path = os.path.abspath(config.train_data_dir)
 
-    max_len, cipher_vocab = get_max_stats(train_path)
-    if max_len == 0:
-        raise ValueError(f"No valid JSON data found in {train_path}.")
+    if isinstance(config.unique_homophones, int) and isinstance(config.max_len, int):
+        max_len = config.max_len
+        cipher_vocab = config.unique_homophones
+    else:
+        max_len, cipher_vocab = get_max_stats(train_path)
+        if max_len == 0:
+            raise ValueError(f"No valid JSON data found in {train_path}.")
+    
+
     dataset = CipherDataset(train_path, max_seq_len=max_len)
     cores = os.cpu_count() or 1
     num_workers = max(1, cores // 2)
-    loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=4)
+    loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, num_workers=num_workers)
 
     model = MambaCipherSolver(
-        vocab_cipher_size=cipher_vocab+1, 
-        vocab_plain_size=PLAIN_VOCAB,
-        d_model=128
+        vocab_cipher_size=cipher_vocab+config.buffer, 
+        vocab_plain_size=config.plain_vocab_size,
+        d_model=config.d_model,
+        n_layers=config.n_layers
     ).to("cuda")
 
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+    os.makedirs(config.save_path, exist_ok=True)
+    config_filename = os.path.join(config.save_path, f"config_{timestamp}.json")
+    with open(config_filename, 'w') as f:
+        json.dump(asdict(config), f, indent=4)
+    filename = f"mamba2_{timestamp}.pth"
+
     print("Training...")
-    train_model(model, loader, cipher_vocab+1, epochs=10)
+    train_model(model, loader, cipher_vocab+config.buffer, epochs=config.epochs, save_path=os.path.join(config.save_path, filename))
