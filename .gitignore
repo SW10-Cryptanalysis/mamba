@@ -207,7 +207,4 @@ marimo/_lsp/
 __marimo__/
 
 .vscode
-train_data
-eval_data
-*.pth
 outputs
