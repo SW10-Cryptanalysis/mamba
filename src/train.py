@@ -7,14 +7,13 @@ from mamba_ssm import Mamba2
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
 import os
 import json
+import zipfile
 from tqdm import tqdm
 from datetime import datetime
 from dataclasses import asdict
 from src.config import Config
 
 config = Config()
-
-import zipfile
 
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
