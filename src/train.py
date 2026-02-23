@@ -17,11 +17,15 @@ config = Config()
 class CipherDataset(Dataset):
     def __init__(self, directory_path, max_seq_len):
         self.max_seq_len = max_seq_len
-        self.file_paths = [
-            os.path.join(directory_path, f) 
-            for f in os.listdir(directory_path) if f.endswith(".json")
-        ]
+        self.file_paths = []
         
+        print(f"Loading file paths from {directory_path}...")
+        with os.scandir(directory_path) as entries:
+            for entry in tqdm(entries, desc="Indexing files", unit="file", leave=False):
+                if entry.is_file() and entry.name.endswith(".json"):
+                    self.file_paths.append(entry.path)
+        
+        print(f"Successfully indexed {len(self.file_paths)} files.")
         self.mapping = {chr(i + 97): i for i in range(26)}
 
     def _pad_trunc(self, list_data):
@@ -34,23 +38,17 @@ class CipherDataset(Dataset):
 
     def __getitem__(self, idx):
         filepath = self.file_paths[idx]
-        
         try:
             with open(filepath, 'r') as f:
                 data = json.load(f)
-            
             ciphertext = data["ciphertext"]
             if isinstance(ciphertext, str):
                 ciphertext = [int(x) for x in ciphertext.split()]
-            
             plaintext = data["plaintext"]
             encoded_plain = [self.mapping[c] for c in plaintext.lower() if c in self.mapping]
-            
             cipher_tensor = torch.tensor(self._pad_trunc(ciphertext), dtype=torch.long)
             plain_tensor = torch.tensor(self._pad_trunc(encoded_plain), dtype=torch.long)
-            
             return cipher_tensor, plain_tensor
-            
         except Exception:
             return torch.zeros(self.max_seq_len, dtype=torch.long), torch.zeros(self.max_seq_len, dtype=torch.long)
 

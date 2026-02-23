@@ -12,7 +12,7 @@ class Config:
     
     batch_size: int = 128
     learning_rate: float = 5e-4
-    epochs: int = 20
+    epochs: int = 30
 
     patience: int = 1
     factor: float = 0.5
