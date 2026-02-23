@@ -126,46 +126,60 @@ class MambaCipherSolver(nn.Module):
         x = self.norm_f(x)
         return self.lm_head(x)
 
-def train_model(model, train_loader, cipher_vocab, epochs=10, save_path="./outputs/mamba_cipher_model.pth"):
+def train_model(model, train_loader, val_loader, cipher_vocab, epochs=10, save_path="./outputs/mamba_cipher_model.pth"):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
     
-    model.train()
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=config.factor, patience=config.patience)
+    
+    best_val_loss = float('inf')
+    
     for epoch in range(epochs):
-        total_loss = 0
+        model.train()
+        total_train_loss = 0
+        train_loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", unit="batch", leave=False)
         
-        loop = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}", unit="batch", leave=False)
-        for cipher, plain in loop:
+        for cipher, plain in train_loop:
             cipher, plain = cipher.to("cuda"), plain.to("cuda")
-            
             optimizer.zero_grad()
-            if cipher.max() >= model.embedding.num_embeddings:
-                print(f"ERROR: Found index {cipher.max().item()} but vocab size is {model.embedding.num_embeddings}")
             outputs = model(cipher)
-            
             loss = criterion(outputs.view(-1, config.plain_vocab_size), plain.view(-1))
-            
             loss.backward()
             optimizer.step()
-            
-            loop.set_postfix(loss=f"{loss.item():.4f}")
-            total_loss += loss.item()
-            
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch [{epoch+1}/{epochs}] Completed - Avg Loss: {avg_loss:.4f}")
+            total_train_loss += loss.item()
+
+        model.eval()
+        total_val_loss = 0
+        with torch.no_grad():
+            for cipher, plain in val_loader:
+                cipher, plain = cipher.to("cuda"), plain.to("cuda")
+                outputs = model(cipher)
+                loss = criterion(outputs.view(-1, config.plain_vocab_size), plain.view(-1))
+                total_val_loss += loss.item()
+
+        avg_train_loss = total_train_loss / len(train_loader)
+        avg_val_loss = total_val_loss / len(val_loader)
         
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': avg_loss,
-            'cipher_vocab': cipher_vocab
-        }, save_path)
-    
-    print(f"Finished Training. Model saved to {save_path}")
+        current_lr = optimizer.param_groups[0]['lr']
+        scheduler.step(avg_val_loss)
+        
+        print(f"Epoch [{epoch+1}/{epochs}] - Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}")
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'val_loss': avg_val_loss,
+                'cipher_vocab': cipher_vocab,
+            }, save_path)
+
+        if current_lr < 1e-7:
+            print(f"Current lr: {current_lr}. Stopping early.")
+            break
 
 if __name__ == "__main__":
     train_path = os.path.abspath(config.train_data_dir)
+    valid_path = os.path.abspath(config.valid_data_dir)
 
     if isinstance(config.unique_homophones, int) and isinstance(config.max_len, int):
         max_len = config.max_len
@@ -175,11 +189,28 @@ if __name__ == "__main__":
         if max_len == 0:
             raise ValueError(f"No valid JSON data found in {train_path}.")
     
-
-    dataset = CipherDataset(train_path, max_seq_len=max_len)
     cores = os.cpu_count() or 1
-    num_workers = max(1, cores // 2)
-    loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, num_workers=num_workers)
+    num_workers = max(1, cores - 4)
+
+    train_dataset = CipherDataset(train_path, max_seq_len=max_len)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=config.batch_size, 
+        shuffle=True, 
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True
+    )
+
+    val_dataset = CipherDataset(valid_path, max_seq_len=max_len)
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=config.batch_size, 
+        shuffle=False, 
+        num_workers=num_workers, 
+        pin_memory=True, 
+        persistent_workers=True
+    )
 
     model = MambaCipherSolver(
         vocab_cipher_size=cipher_vocab+config.buffer, 
@@ -196,4 +227,11 @@ if __name__ == "__main__":
     filename = f"mamba2_{timestamp}.pth"
 
     print("Training...")
-    train_model(model, loader, cipher_vocab+config.buffer, epochs=config.epochs, save_path=os.path.join(config.save_path, filename))
+    train_model(
+        model, 
+        train_loader, 
+        val_loader,
+        cipher_vocab + config.buffer, 
+        epochs=config.epochs, 
+        save_path=os.path.join(config.save_path, filename)
+    )

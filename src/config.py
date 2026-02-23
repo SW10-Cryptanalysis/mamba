@@ -10,10 +10,12 @@ class Config:
     d_conv: int = 4
     expand: int = 2
     
-    batch_size: int = 16
-    learning_rate: float = 1e-4
-    epochs: int = 10
-    num_workers: int = 4
+    batch_size: int = 128
+    learning_rate: float = 5e-4
+    epochs: int = 20
+
+    patience: int = 1
+    factor: float = 0.5
 
     save_path: str = "./outputs"
     data_dir: str = "../Ciphers/"
