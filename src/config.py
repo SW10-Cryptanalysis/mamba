@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import os
+import json
 
 @dataclass
 class Config:
@@ -9,15 +10,19 @@ class Config:
     d_conv: int = 4
     expand: int = 2
     
-    batch_size: int = 16
-    learning_rate: float = 1e-4
-    epochs: int = 10
-    num_workers: int = 4
+    batch_size: int = 128
+    learning_rate: float = 5e-4
+    epochs: int = 30
+
+    patience: int = 1
+    factor: float = 0.5
 
     save_path: str = "./outputs"
-    train_data_dir: str = "./train_data"
-    eval_data_dir: str = "./eval_data"
-    homophone_file: str = "h_count"
+    data_dir: str = "../Ciphers/"
+    train_data_dir: str = os.path.join(data_dir, "Training")
+    valid_data_dir: str = os.path.join(data_dir, "Validation")
+    eval_data_dir: str = os.path.join(data_dir, "Test")
+    homophone_file: str = "metadata.json"
 
     plain_vocab_size: int = 26
     unique_homophones: int = 500
@@ -26,14 +31,13 @@ class Config:
     buffer: int = 1
 
     def __post_init__(self):
-        homophone_path = os.path.join(self.train_data_dir, self.homophone_file)
+        homophone_path = os.path.join(self.data_dir, self.homophone_file)
         if os.path.exists(homophone_path):
             try:
                 with open(homophone_path, "r") as f:
-                    self.unique_homophones = int(f.read().strip())
-            except (ValueError, IOError) as e:
-                print(f"Warning - Could not read file: {self.homophone_file}")
-                print(f"Using default value: {self.unique_homophones}")
-                print(f"{e}")
-
+                    data = json.load(f)
+                    self.unique_homophones = int(data.get("max_symbol_id", self.unique_homophones))
+            except (json.JSONDecodeError, ValueError, IOError) as e:
+                print(f"Warning - Could not parse {self.homophone_file}. Using default.")
+                print(f"Error: {e}")
         self.vocab_size = self.unique_homophones + self.plain_vocab_size + self.buffer
