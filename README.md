@@ -8,7 +8,7 @@ uv run -m src.train
 ```
 #### To test model: 
 ``` shell
-uv run -m src.eval
+uv run -m src.eval [model]
 ```
 #### To run tests model: 
 ``` shell
