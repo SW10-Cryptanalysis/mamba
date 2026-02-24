@@ -65,8 +65,9 @@ class CipherDataset(Dataset):
             cipher_tensor = torch.tensor(self._pad_trunc(ciphertext), dtype=torch.long)
             plain_tensor = torch.tensor(self._pad_trunc(encoded_plain), dtype=torch.long)
             return cipher_tensor, plain_tensor
-        except Exception:
-            return torch.zeros(self.max_seq_len, dtype=torch.long), torch.zeros(self.max_seq_len, dtype=torch.long)
+        except Exception as e:
+            location = f"{path} -> {internal_name}" if internal_name else path
+            raise RuntimeError(f"Failed to process {location}: {e}")
 
 def process_json(filepath):
     try:
@@ -81,8 +82,9 @@ def process_json(filepath):
         actual_len = len(ciphertext)
         
         return actual_len, actual_max_val
-    except Exception:
-        return 0, 0
+    except Exception as e:
+        print(f"\nWarning: Skipping malformed file {filepath}: {e}")
+        return None
 
 def get_max_stats(directory_path):
     print(f"Scanning directory: {directory_path}...")
@@ -93,11 +95,11 @@ def get_max_stats(directory_path):
     ]
     
     if not files:
-        print("Warning: No JSON files found in the directory.")
-        return 0, 0
+        raise FileNotFoundError(f"No JSON files found in the directory: {directory_path}")
 
     max_length = 0
     max_symbols = 0
+    skipped_count = 0
     
     with ProcessPoolExecutor() as executor:
         results = list(tqdm(
@@ -106,12 +108,20 @@ def get_max_stats(directory_path):
             desc="Analyzing Dataset Dimensions"
         ))
         
-    for length, symbols in results:
+    for res in results:
+        if res is None:
+            skipped_count += 1
+            continue
+            
+        length, symbols = res
         if length > max_length: 
             max_length = length
         if symbols > max_symbols: 
             max_symbols = symbols
             
+    if skipped_count > 0:
+        print(f"\nFinished with warnings: {skipped_count} files were malformed and skipped.")
+        
     print(f"Scan complete. Max Seq Len: {max_length}, Highest Symbol ID: {max_symbols}")
     return max_length, max_symbols
 
