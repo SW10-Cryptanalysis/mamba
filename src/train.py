@@ -129,7 +129,7 @@ class CipherDataset(Dataset):
 			raise RuntimeError(f"Failed to process {location}: {e}") from e
 
 
-def process_json(filepath: Path) -> tuple[int, int]:
+def process_json(filepath: Path) -> tuple[int, int] | None:
 	"""Process a JSON file and return the length and maximum value.
 
 	Args:
