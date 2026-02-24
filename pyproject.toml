@@ -8,7 +8,7 @@ dependencies = [
     "torch>=2.10.0",
     "tqdm>=4.67.3",
     "numpy",
-	"easy-logging>=1.0.1",
+	"easy-logging>=0.1.1",
 ]
 
 [project.optional-dependencies]
