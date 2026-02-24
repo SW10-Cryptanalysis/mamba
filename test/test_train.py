@@ -34,7 +34,9 @@ def test_cipher_dataset_padding():
     
     assert cipher.shape[0] == 5
     assert cipher[3] == 0
-    assert plain.tolist() == [0, 1, 2, 0, 0] 
+    offset = dataset.char_offset
+    expected_plain = [0 + offset, 1 + offset, 2 + offset, 0, 0]
+    assert plain.tolist() == expected_plain
 
     os.remove(file_path)
     os.rmdir(temp_dir)

@@ -9,9 +9,9 @@ from src.config import Config
 
 config = Config()
 
-def decode_plain(indices):
+def decode_plain(indices, char_offset):
     """Converts list of integers (0-25) back into a string (a-z)."""
-    mapping = {i: chr(i + 97) for i in range(26)}
+    mapping = {i + char_offset: chr(i + 97) for i in range(26)}
     return "".join([mapping.get(idx, "?") for idx in indices])
 
 def ser(pred, plaintext):
@@ -40,12 +40,10 @@ def test_model(test_dir, model_path=None):
 
     checkpoint = torch.load(model_path, map_location="cuda")
 
-    if isinstance(config.unique_homophones, int):
-        cipher_vocab = config.unique_homophones + config.buffer
-    else:
-        cipher_vocab = checkpoint['cipher_vocab']
+    char_offset = checkpoint['char_offset']
+    vocab_size = char_offset + config.plain_vocab_size + config.buffer
 
-    model = MambaCipherSolver(cipher_vocab, config.plain_vocab_size).to("cuda")
+    model = MambaCipherSolver(vocab_size, char_offset).to("cuda")
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     results = {
@@ -95,7 +93,7 @@ def test_model(test_dir, model_path=None):
             if isinstance(pred_indices, int):
                 pred_indices = [pred_indices]
             
-            deciphered_text = decode_plain(pred_indices)
+            deciphered_text = decode_plain(pred_indices, char_offset)
             plaintext = data["plaintext"]
             symbol_err_rate = ser(deciphered_text, plaintext)
             

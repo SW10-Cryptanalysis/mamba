@@ -34,6 +34,8 @@ class CipherDataset(Dataset):
         
         print(f"Successfully indexed {len(self.file_paths)} files.")
         self.mapping = {chr(i + 97): i for i in range(26)}
+        self.sep_token = config.unique_homophones + 1
+        self.char_offset = self.sep_token + 1
 
     def _pad_trunc(self, list_data):
         if len(list_data) > self.max_seq_len:
@@ -59,7 +61,7 @@ class CipherDataset(Dataset):
             if isinstance(ciphertext, str):
                 ciphertext = [int(x) for x in ciphertext.split()]
             plaintext = data["plaintext"]
-            encoded_plain = [self.mapping[c] for c in plaintext.lower() if c in self.mapping]
+            encoded_plain = [self.mapping[c] + self.char_offset for c in plaintext.lower() if c in self.mapping]
             cipher_tensor = torch.tensor(self._pad_trunc(ciphertext), dtype=torch.long)
             plain_tensor = torch.tensor(self._pad_trunc(encoded_plain), dtype=torch.long)
             return cipher_tensor, plain_tensor
@@ -114,9 +116,10 @@ def get_max_stats(directory_path):
     return max_length, max_symbols
 
 class MambaCipherSolver(nn.Module):
-    def __init__(self, vocab_cipher_size, vocab_plain_size=26, d_model=128, n_layers=4):
+    def __init__(self, vocab_size, char_offset, d_model=128, n_layers=4):
         super().__init__()
-        self.embedding = nn.Embedding(vocab_cipher_size, d_model)
+        self.char_offset = char_offset
+        self.embedding = nn.Embedding(vocab_size, d_model)
         
         self.layers = nn.ModuleList([
             nn.ModuleDict({
@@ -126,7 +129,7 @@ class MambaCipherSolver(nn.Module):
         ])
         
         self.norm_f = RMSNorm(d_model) 
-        self.lm_head = nn.Linear(d_model, vocab_plain_size, bias=False)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
 
     def forward(self, x):
         x = self.embedding(x)
@@ -155,7 +158,7 @@ def train_model(model, train_loader, val_loader, cipher_vocab, epochs=10, save_p
             cipher, plain = cipher.to("cuda"), plain.to("cuda")
             optimizer.zero_grad()
             outputs = model(cipher)
-            loss = criterion(outputs.view(-1, config.plain_vocab_size), plain.view(-1))
+            loss = criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
             loss.backward()
             optimizer.step()
             total_train_loss += loss.item()
@@ -166,7 +169,7 @@ def train_model(model, train_loader, val_loader, cipher_vocab, epochs=10, save_p
             for cipher, plain in val_loader:
                 cipher, plain = cipher.to("cuda"), plain.to("cuda")
                 outputs = model(cipher)
-                loss = criterion(outputs.view(-1, config.plain_vocab_size), plain.view(-1))
+                loss = criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
                 total_val_loss += loss.item()
 
         avg_train_loss = total_train_loss / len(train_loader)
@@ -183,6 +186,7 @@ def train_model(model, train_loader, val_loader, cipher_vocab, epochs=10, save_p
                 'model_state_dict': model.state_dict(),
                 'val_loss': avg_val_loss,
                 'cipher_vocab': cipher_vocab,
+                'char_offset': model.char_offset,
             }, save_path)
 
         if current_lr < 1e-7:
@@ -224,9 +228,11 @@ if __name__ == "__main__":
         persistent_workers=True
     )
 
+    vocab_size = train_dataset.char_offset + config.plain_vocab_size + config.buffer
+
     model = MambaCipherSolver(
-        vocab_cipher_size=cipher_vocab+config.buffer, 
-        vocab_plain_size=config.plain_vocab_size,
+        vocab_size=vocab_size, 
+        char_offset=train_dataset.char_offset,
         d_model=config.d_model,
         n_layers=config.n_layers
     ).to("cuda")

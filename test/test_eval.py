@@ -1,15 +1,17 @@
 from src.eval import decode_plain, ser
 
 def test_decode_plain():
-    """Verify that indices are converted to the correct letters."""
-    indices = [0, 1, 2, 25]
+    """Verify that indices are converted to the correct letters with offset."""
+    offset = 500
+    indices = [500, 501, 502, 525]
     expected = "abcz"
-    assert decode_plain(indices) == expected
+    assert decode_plain(indices, offset) == expected
 
 def test_decode_plain_unknown():
     """Verify that out-of-bounds indices return a question mark."""
-    indices = [0, 99]
-    assert decode_plain(indices) == "a?"
+    offset = 1000
+    indices = [1000, 99]
+    assert decode_plain(indices, offset) == "a?"
 
 def test_ser():
     """If 2 out of 4 symbols are wrong, SER should be 0.5."""
