@@ -127,4 +127,4 @@ if __name__ == "__main__":
 
     m_path = os.path.join(config.save_path, args.model_name) if args.model_name else None
     
-    test_model(config.eval_data_dir, model_path=m_path)
+    test_model(config.test_data_dir, model_path=m_path)
