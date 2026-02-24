@@ -29,3 +29,33 @@ norecursedirs = ["train_data"]
 
 [tool.uv]
 environments = ["sys_platform == 'linux'"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+exclude = ["venv", ".venv", "__pycache__", "build", "dist", ".eggs", "*.egg", ".mypy_cache", ".pytest_cache"]
+select = ["E", "F", "W", "C90", "B", "B9", "ANN", "COM", "D", "ERA", "ISC", "N", "Q000", "S", "SIM", "TID251", "UP", "YTT", "T"]
+ignore = [
+	"W191",  # indentation contains tabs
+	"ERA001", # Found commented-out code
+	"S311",  # Standard pseudo-random generators are not suitable for security/cryptographic purposes
+	"D206",  # Docstring should be indented with spaces equal to the surrounding code
+	"D100",  # Missing docstring in public module
+	"D203",  # incorrect-blank-line-before-class
+	"D213",  # multi-line-summary-second-line
+	"UP035", # Import from `collections.abc`instead: ...
+	"ANN401",# Dynamically typed expressions (typing.Any) are disallowed 
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/**/*.py" = [
+    "S101",    # Use of assert detected
+    "D",       # All docstring rules
+    "ANN",     # All type annotation rules
+	"E501",   # Line too long
+	"COM812",  # Missing trailing comma in a list or dict
+	"ERA001", # Found commented-out code
+]
+[tool.ruff.format]
+indent-style = "tab"
