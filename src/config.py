@@ -61,16 +61,16 @@ class Config:
 	patience: int = 1
 	factor: float = 0.5
 
-	save_path: Path = Path(__file__).parent.parent.parent / "outputs"
-	data_dir = Path(__file__).parent.parent.parent.parent / "Ciphers"
+	save_path: Path = Path(__file__).parent.parent / "outputs"
+	data_dir = Path(__file__).parent.parent.parent / "Ciphers"
 	train_data_dir: Path = data_dir / "Training"
 	valid_data_dir: Path = data_dir / "Validation"
 	test_data_dir: Path = data_dir / "Test"
 	homophone_file: str = "metadata.json"
 
 	plain_vocab_size: int = 26
-	unique_homophones: int = 500
-	max_len: int = 1_000
+	unique_homophones: int = 3000
+	max_len: int = 12_000
 	vocab_size: int = 0
 	buffer: int = 1
 
