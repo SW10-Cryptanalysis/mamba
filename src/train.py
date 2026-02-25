@@ -425,7 +425,7 @@ if __name__ == "__main__":
 	os.makedirs(config.save_path, exist_ok=True)
 	config_filename = os.path.join(config.save_path, f"config_{timestamp}.json")
 	with open(config_filename, "w") as f:
-		json.dump(asdict(config), f, indent=4)
+		json.dump(asdict(config), f, indent=4, default=str)
 	filename = f"mamba2_{timestamp}.pth"
 
 	logger.info("Training...")
