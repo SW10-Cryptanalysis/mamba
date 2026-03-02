@@ -48,15 +48,15 @@ class Config:
 
 	"""
 
-	d_model: int = 128
-	n_layers: int = 4
-	d_state: int = 64
+	d_model: int = 64
+	n_layers: int = 1
+	d_state: int = 16
 	d_conv: int = 4
-	expand: int = 2
+	expand: int = 1
 
-	batch_size: int = 128
+	batch_size: int = 16
 	learning_rate: float = 5e-4
-	epochs: int = 30
+	epochs: int = 5
 
 	patience: int = 1
 	factor: float = 0.5
