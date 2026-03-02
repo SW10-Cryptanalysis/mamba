@@ -13,6 +13,7 @@ from src.config import Config
 from src.utils.data_manager import DatasetManager
 from src.data.dataset import CipherDataset
 from src.data.tokenizer import CipherTokenizer
+from src.engine.trainer import MambaTrainer
 import logging
 from easy_logging import EasyFormatter
 from pathlib import Path
@@ -96,98 +97,6 @@ class MambaCipherSolver(nn.Module):
 		x = self.norm_f(x)
 		return self.lm_head(x)
 
-
-def train_model(
-	model: MambaCipherSolver,
-	train_loader: DataLoader,
-	val_loader: DataLoader,
-	cipher_vocab: int,
-	epochs: int = 10,
-	save_path: Path | None = None,
-) -> None:
-	"""Trains a MambaCipherSolver model on the provided dataloaders.
-
-	Args:
-		model (MambaCipherSolver): The model to train.
-		train_loader (DataLoader): The dataloader to use for training.
-		val_loader (DataLoader): The dataloader to use for validation.
-		cipher_vocab (int): The size of the vocabulary for the ciphers.
-		epochs (int, optional): The number of epochs to train for. Defaults to 10.
-		save_path (Path | None, optional): The path to save the model to.
-			Defaults to None.
-
-	"""
-	if save_path is None:
-		save_path = Path(__file__).parent.parent.parent / "outputs"
-	criterion = nn.CrossEntropyLoss()
-	optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
-
-	scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-		optimizer,
-		mode="min",
-		factor=config.factor,
-		patience=config.patience,
-	)
-
-	best_val_loss = float("inf")
-
-	for epoch in range(epochs):
-		model.train()
-		total_train_loss = 0
-		train_loop = tqdm(
-			train_loader,
-			desc=f"Epoch {epoch + 1}/{epochs} [Train]",
-			unit="batch",
-			leave=False,
-		)
-
-		for cipher, plain in train_loop:
-			cipher, plain = cipher.to("cuda"), plain.to("cuda")
-			optimizer.zero_grad()
-			outputs = model(cipher)
-			loss = criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
-			loss.backward()
-			optimizer.step()
-			total_train_loss += loss.item()
-
-		model.eval()
-		total_val_loss = 0
-		with torch.no_grad():
-			for cipher, plain in val_loader:
-				cipher, plain = cipher.to("cuda"), plain.to("cuda")
-				outputs = model(cipher)
-				loss = criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
-				total_val_loss += loss.item()
-
-		avg_train_loss = total_train_loss / len(train_loader)
-		avg_val_loss = total_val_loss / len(val_loader)
-
-		current_lr = optimizer.param_groups[0]["lr"]
-		scheduler.step(avg_val_loss)
-
-		logger.info(
-			f"Epoch [{epoch + 1}/{epochs}] - Train Loss: {avg_train_loss:.4f} "
-			"| Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}",
-		)
-
-		if avg_val_loss < best_val_loss:
-			best_val_loss = avg_val_loss
-			torch.save(
-				{
-					"model_state_dict": model.state_dict(),
-					"val_loss": avg_val_loss,
-					"cipher_vocab": cipher_vocab,
-					"char_offset": model.char_offset,
-					"d_model": config.d_model,
-    				"n_layers": config.n_layers
-				},
-				save_path,
-			)
-
-		if current_lr < 1e-7:
-			logger.info(f"Current lr: {current_lr}. Stopping early.")
-			break
-
 if __name__ == "__main__":
 	train_path = os.path.abspath(config.train_data_dir)
 	valid_path = os.path.abspath(config.valid_data_dir)
@@ -227,6 +136,7 @@ if __name__ == "__main__":
 	)
 
 	vocab_size = tokenizer.char_offset + config.plain_vocab_size + config.buffer
+	
 	model = MambaCipherSolver(
 		vocab_size=tokenizer.vocab_size,
 		char_offset=tokenizer.char_offset,
@@ -236,17 +146,18 @@ if __name__ == "__main__":
 
 	timestamp = datetime.now().strftime("%d%m-%H%M")
 	os.makedirs(config.save_path, exist_ok=True)
-	config_filename = os.path.join(config.save_path, f"config_{timestamp}.json")
-	with open(config_filename, "w") as f:
+	checkpoint_file = Path(config.save_path) / f"mamba2_{timestamp}.pth"
+	model_config = Path(config.save_path) / f"config_{timestamp}.json"
+	with open(model_config, "w") as f:
 		json.dump(asdict(config), f, indent=4, default=str)
-	filename = f"mamba2_{timestamp}.pth"
+
+	trainer = MambaTrainer(
+		model=model,
+		train_loader=train_loader,
+		val_loader=val_loader,
+		config=config,
+		save_path=checkpoint_file
+	)
 
 	logger.info("Training...")
-	train_model(
-		model,
-		train_loader,
-		val_loader,
-		cipher_vocab + config.buffer,
-		epochs=config.epochs,
-		save_path=Path(config.save_path) / filename,
-	)
+	trainer.train(epochs=config.epochs)

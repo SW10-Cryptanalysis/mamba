@@ -35,4 +35,4 @@ class CipherTokenizer:
 
     @property
     def vocab_size(self) -> int:
-        return self.char_offset + 26 + self.config.buffer
+        return self.char_offset + self.config.plain_vocab_size + self.config.buffer
