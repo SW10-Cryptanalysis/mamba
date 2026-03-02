@@ -12,6 +12,7 @@ from dataclasses import asdict
 from src.config import Config
 from src.utils.data_manager import DatasetManager
 from src.data.dataset import CipherDataset
+from src.data.tokenizer import CipherTokenizer
 import logging
 from easy_logging import EasyFormatter
 from pathlib import Path
@@ -22,6 +23,7 @@ logger = logging.getLogger("train.py")
 logger.addHandler(handler)
 
 config = Config()
+tokenizer = CipherTokenizer(config)
 
 class MambaCipherSolver(nn.Module):
 	"""MambaCipherSolver model.
@@ -204,7 +206,7 @@ if __name__ == "__main__":
 	cores = os.cpu_count() or 1
 	num_workers = max(1, cores - 4)
 
-	train_dataset = CipherDataset(train_file_list, max_seq_len=max_len, config=config)
+	train_dataset = CipherDataset(train_file_list, max_seq_len=max_len, tokenizer=tokenizer)
 	train_loader = DataLoader(
 		train_dataset,
 		batch_size=config.batch_size,
@@ -214,7 +216,7 @@ if __name__ == "__main__":
 		persistent_workers=True,
 	)
 
-	val_dataset = CipherDataset(valid_file_list, max_seq_len=max_len, config=config)
+	val_dataset = CipherDataset(valid_file_list, max_seq_len=max_len, tokenizer=tokenizer)
 	val_loader = DataLoader(
 		val_dataset,
 		batch_size=config.batch_size,
@@ -224,16 +226,10 @@ if __name__ == "__main__":
 		persistent_workers=True,
 	)
 
-	vocab_size = train_dataset.char_offset + config.plain_vocab_size + config.buffer
-	print(f"--- MEMORY DEBUG ---")
-	print(f"Max Sequence Length: {max_len}")
-	print(f"Vocab Size: {vocab_size}")
-	print(f"Batch Size: {config.batch_size}")
-	print(f"Model Dimension (d_model): {config.d_model}")
-	print(f"---------------------")
+	vocab_size = tokenizer.char_offset + config.plain_vocab_size + config.buffer
 	model = MambaCipherSolver(
-		vocab_size=vocab_size,
-		char_offset=train_dataset.char_offset,
+		vocab_size=tokenizer.vocab_size,
+		char_offset=tokenizer.char_offset,
 		d_model=config.d_model,
 		n_layers=config.n_layers,
 	).to("cuda")

@@ -9,6 +9,7 @@ from src.train import MambaCipherSolver
 from src.config import Config
 from src.utils.data_manager import DatasetManager
 from src.data.dataset import CipherDataset
+from src.data.tokenizer import CipherTokenizer
 from easy_logging import EasyFormatter
 import logging
 
@@ -18,6 +19,7 @@ logger = logging.getLogger("eval.py")
 logger.addHandler(handler)
 
 config = Config()
+tokenizer = CipherTokenizer(config)
 
 def decode_plain(indices: list[int], char_offset: int) -> str:
     """Convert list of integers (0-25) back into a string (a-z).
@@ -80,7 +82,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     model.eval()
 
     test_files = DatasetManager.scan_directory(test_dir)
-    test_dataset = CipherDataset(test_files, max_seq_len=config.max_len, config=config, mode="eval")
+    test_dataset = CipherDataset(test_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="eval")
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     results = {
@@ -103,7 +105,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             
             filename = f"{os.path.basename(current_path)}/{current_internal}" if current_internal else os.path.basename(current_path)
             
-            deciphered_text = decode_plain(pred_indices, char_offset)
+            deciphered_text = tokenizer.decode(pred_indices)
             deciphered_text = deciphered_text[:len(current_ground_truth)]
             
             symbol_err_rate = ser(deciphered_text, current_ground_truth)
