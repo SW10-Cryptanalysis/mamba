@@ -24,15 +24,12 @@ class CipherSolver:
         checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         
         char_offset = checkpoint["char_offset"]
-        d_model = checkpoint.get("d_model", self.config.d_model)
-        n_layers = checkpoint.get("n_layers", self.config.n_layers)
         vocab_size = char_offset + self.config.plain_vocab_size + self.config.buffer
 
         self.model = MambaModel(
             vocab_size=vocab_size,
             char_offset=char_offset,
-            d_model=d_model,
-            n_layers=n_layers
+            config=self.config
         ).to(self.device)
 
         self.model.load_state_dict(checkpoint["model_state_dict"])

@@ -1,5 +1,4 @@
 import json
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -37,8 +36,7 @@ class MambaModel(nn.Module):
 		self,
 		vocab_size: int,
 		char_offset: int,
-		d_model: int = 128,
-		n_layers: int = 4,
+		config: Config
 	) -> None:
 		"""MambaCipherSolver model.
 
@@ -51,27 +49,27 @@ class MambaModel(nn.Module):
 		"""
 		super().__init__()
 		self.char_offset = char_offset
-		self.embedding = nn.Embedding(vocab_size, d_model)
+		self.embedding = nn.Embedding(vocab_size, config.d_model)
 
 		self.layers = nn.ModuleList(
 			[
 				nn.ModuleDict(
 					{
-						"norm": RMSNorm(d_model),
+						"norm": RMSNorm(config.d_model),
 						"mixer": Mamba2(
-							d_model=d_model,
+							d_model=config.d_model,
 							d_state=config.d_state,
 							d_conv=config.d_conv,
 							expand=config.expand,
 						),
 					},
 				)
-				for _ in range(n_layers)
+				for _ in range(config.n_layers)
 			],
 		)
 
-		self.norm_f = RMSNorm(d_model)
-		self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
+		self.norm_f = RMSNorm(config.d_model)
+		self.lm_head = nn.Linear(config.d_model, vocab_size, bias=False)
 
 	def forward(self, x: torch.Tensor) -> torch.Tensor:
 		"""Forward pass of the model.
@@ -117,7 +115,7 @@ if __name__ == "__main__":
 	if target_exp_dir:
 		config_json = target_exp_dir / "config.json"
 		if config_json.exists():
-			logger.info(f"Resuming: replacing global config with {config_json}")
+			logger.info(f"Resuming training: replacing global config with {config_json}")
 			with open(config_json, "r") as f:
 				config_dict = json.load(f)
 				for key, value in config_dict.items():
@@ -129,7 +127,6 @@ if __name__ == "__main__":
 			logger.warning("No config.json found in resume folder. Using current global settings.")
 
 	tokenizer = CipherTokenizer(config)
-	config.vocab_size = tokenizer.vocab_size
 
 	train_path = os.path.abspath(config.train_data_dir)
 	valid_path = os.path.abspath(config.valid_data_dir)
@@ -166,10 +163,9 @@ if __name__ == "__main__":
 	)
 
 	model = MambaModel(
-		vocab_size=config.vocab_size,
+		vocab_size=tokenizer.vocab_size,
 		char_offset=tokenizer.char_offset,
-		d_model=config.d_model,
-		n_layers=config.n_layers,
+		config=config
 	).to("cuda")
 
 	trainer = MambaTrainer(

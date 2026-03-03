@@ -20,12 +20,15 @@ config = Config()
 
 def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     if model_path is None:
-        list_of_files = glob.glob(os.path.join(config.save_path, "*.pth"))
+        list_of_files = glob.glob(os.path.join(config.save_path, "**/*.pth"), recursive=True)
         if not list_of_files:
             logger.error(f"No models found in {config.save_path}")
             return
-        model_path = Path(max(list_of_files, key=os.path.getctime))
-
+        model_path = Path(max(list_of_files, key=os.path.getmtime))
+    
+    model_dir = model_path.parent 
+    print(f"Eval on model: {model_path}")
+    
     solver = CipherSolver(config)
     solver.load_checkpoint(model_path)
 
@@ -58,8 +61,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
         logger.info(f"File: {filename} | SER: {symbol_err_rate:.4f} | Predicted: {deciphered_text}")
 
     full_model_name = model_path.stem
-    identifier = full_model_name.split("_")[-1] if "_" in full_model_name else full_model_name
-    output_filename = os.path.join(config.save_path, f"eval_{identifier}.json")
+    output_filename = model_dir / f"eval_{full_model_name}.json"
     
     with open(output_filename, "w") as f:
         json.dump(results, f, indent=4)
@@ -67,8 +69,32 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Mamba Cipher Model")
-    parser.add_argument("model_name", nargs="?", default=None)
+    parser.add_argument("model_path", nargs="?", default=None, help="Path to specific .pth file")
     args = parser.parse_args()
 
-    m_path = Path(os.path.join(config.save_path, args.model_name)) if args.model_name else None
-    test_model(Path(config.test_data_dir), model_path=m_path)
+    config = Config()
+
+    model_path = None
+    if args.model_path:
+        model_path = Path(args.model_path)
+    else:
+        latest_checkpoint = DataManager.get_latest_checkpoint(config.save_path)
+        if latest_checkpoint:
+            model_path = latest_checkpoint
+            logger.info(f"Auto-detected latest model: {model_path}")
+
+    if not model_path or not model_path.exists():
+        logger.error("No valid model path provided or found.")
+        exit(1)
+
+    exp_dir = model_path.parent
+    config_json = exp_dir / "config.json"
+    if config_json.exists():
+        logger.info(f"Loading experiment config from {config_json}")
+        with open(config_json, "r") as f:
+            saved_dict = json.load(f)
+            for k, v in saved_dict.items():
+                if hasattr(config, k):
+                    setattr(config, k, v)
+
+    test_model(Path(config.test_data_dir), model_path=model_path)

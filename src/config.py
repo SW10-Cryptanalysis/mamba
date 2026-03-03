@@ -71,37 +71,4 @@ class Config:
 	plain_vocab_size: int = 26
 	unique_homophones: int = 3000
 	max_len: int = 12_000
-	vocab_size: int = 0
 	buffer: int = 1
-
-	@classmethod
-	def from_homophone_file(cls, file_path: Path) -> "Config":
-		"""Create a Config object from a JSON file with max homophone count.
-
-		Args:
-			file_path (Path): The path to the homophone count JSON file.
-
-		Returns:
-			Config: The Config object.
-
-		"""
-		unique_homophones = None
-		if os.path.exists(file_path):
-			try:
-				with open(file_path) as f:
-					data = json.load(f)
-					unique_homophones = int(
-						data.get("max_symbol_id"),
-					)
-			except (OSError, json.JSONDecodeError, ValueError) as e:
-				logger.warning(
-					f"Could not parse {file_path}. Using default. Error: {e}",
-				)
-
-		if unique_homophones is None:
-			return cls()
-
-		return cls(
-			unique_homophones=unique_homophones,
-			vocab_size=unique_homophones + 26 + 1,
-		)
