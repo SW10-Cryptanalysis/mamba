@@ -1,22 +1,20 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader
 from mamba_ssm import Mamba2
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
 import os
 import json
-from tqdm import tqdm
 from datetime import datetime
 from dataclasses import asdict
+import logging
+from easy_logging import EasyFormatter
+from pathlib import Path
 from src.config import Config
 from src.utils.data_manager import DatasetManager
 from src.data.dataset import CipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
-import logging
-from easy_logging import EasyFormatter
-from pathlib import Path
 
 handler = logging.StreamHandler()
 handler.setFormatter(EasyFormatter())
@@ -26,7 +24,7 @@ logger.addHandler(handler)
 config = Config()
 tokenizer = CipherTokenizer(config)
 
-class MambaCipherSolver(nn.Module):
+class MambaModel(nn.Module):
 	"""MambaCipherSolver model.
 
 	Attributes:
@@ -134,10 +132,8 @@ if __name__ == "__main__":
 		pin_memory=True,
 		persistent_workers=True,
 	)
-
-	vocab_size = tokenizer.char_offset + config.plain_vocab_size + config.buffer
 	
-	model = MambaCipherSolver(
+	model = MambaModel(
 		vocab_size=tokenizer.vocab_size,
 		char_offset=tokenizer.char_offset,
 		d_model=config.d_model,
