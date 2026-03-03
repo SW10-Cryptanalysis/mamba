@@ -1,3 +1,5 @@
+import json
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -18,9 +20,6 @@ handler = logging.StreamHandler()
 handler.setFormatter(EasyFormatter())
 logger = logging.getLogger("train.py")
 logger.addHandler(handler)
-
-config = Config()
-tokenizer = CipherTokenizer(config)
 
 class MambaModel(nn.Module):
 	"""MambaCipherSolver model.
@@ -94,16 +93,49 @@ class MambaModel(nn.Module):
 		return self.lm_head(x)
 
 if __name__ == "__main__":
+	config = Config()
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--resume", nargs="?", const="auto", default=None)
 	args = parser.parse_args()
 
+	save_path = Path(config.save_path)
+	resume_path = None
+	target_exp_dir = None
+	
+	if args.resume == "auto":
+		resume_path = DataManager.get_latest_checkpoint(save_path)
+		if resume_path:
+			target_exp_dir = resume_path.parent
+			logger.info(f"Auto-detected checkpoint: {resume_path}")
+	elif args.resume:
+		resume_path = Path(args.resume)
+		if resume_path.exists():
+			target_exp_dir = resume_path.parent
+		else:
+			raise FileNotFoundError(f"Checkpoint not found: {resume_path}")
+
+	if target_exp_dir:
+		config_json = target_exp_dir / "config.json"
+		if config_json.exists():
+			logger.info(f"Resuming: replacing global config with {config_json}")
+			with open(config_json, "r") as f:
+				config_dict = json.load(f)
+				for key, value in config_dict.items():
+					if hasattr(config, key):
+						if isinstance(value, str) and ("path" in key or "dir" in key):
+							value = Path(value)
+						setattr(config, key, value)
+		else:
+			logger.warning("No config.json found in resume folder. Using current global settings.")
+
+	tokenizer = CipherTokenizer(config)
+	config.vocab_size = tokenizer.vocab_size
+
 	train_path = os.path.abspath(config.train_data_dir)
 	valid_path = os.path.abspath(config.valid_data_dir)
-
 	train_file_list = DataManager.scan_directory(train_path)
 	valid_file_list = DataManager.scan_directory(valid_path)
-
+	
 	if isinstance(config.unique_homophones, int) and isinstance(config.max_len, int):
 		max_len = config.max_len
 		cipher_vocab = config.unique_homophones
@@ -115,9 +147,8 @@ if __name__ == "__main__":
 	cores = os.cpu_count() or 1
 	num_workers = max(1, cores - 4)
 
-	train_dataset = CipherDataset(train_file_list, max_seq_len=max_len, tokenizer=tokenizer)
 	train_loader = DataLoader(
-		train_dataset,
+		CipherDataset(train_file_list, max_seq_len=max_len, tokenizer=tokenizer),
 		batch_size=config.batch_size,
 		shuffle=True,
 		num_workers=num_workers,
@@ -125,37 +156,21 @@ if __name__ == "__main__":
 		persistent_workers=True,
 	)
 
-	val_dataset = CipherDataset(valid_file_list, max_seq_len=max_len, tokenizer=tokenizer)
 	val_loader = DataLoader(
-		val_dataset,
+		CipherDataset(valid_file_list, max_seq_len=max_len, tokenizer=tokenizer),
 		batch_size=config.batch_size,
 		shuffle=False,
 		num_workers=num_workers,
 		pin_memory=True,
 		persistent_workers=True,
 	)
-	
+
 	model = MambaModel(
-		vocab_size=tokenizer.vocab_size,
+		vocab_size=config.vocab_size,
 		char_offset=tokenizer.char_offset,
 		d_model=config.d_model,
 		n_layers=config.n_layers,
 	).to("cuda")
-
-	save_path = Path(config.save_path) 
-	save_path.mkdir(parents=True, exist_ok=True)
-
-	resume_path = None
-	target_exp_dir = None
-	
-	if args.resume == "auto":
-		resume_path = DataManager.get_latest_checkpoint(save_path)
-		if resume_path:
-			target_exp_dir = resume_path.parent
-			logger.info(f"Auto-detected checkpoint: {resume_path}")
-	elif args.resume:
-		resume_path = Path(args.resume)
-		target_exp_dir = resume_path.parent
 
 	trainer = MambaTrainer(
 		model=model,
