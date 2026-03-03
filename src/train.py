@@ -4,14 +4,12 @@ from torch.utils.data import DataLoader
 from mamba_ssm import Mamba2
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
 import os
-import json
-from datetime import datetime
-from dataclasses import asdict
+import argparse
 import logging
 from easy_logging import EasyFormatter
 from pathlib import Path
 from src.config import Config
-from src.utils.data_manager import DatasetManager
+from src.utils.data_manager import DataManager
 from src.data.dataset import CipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
@@ -96,17 +94,21 @@ class MambaModel(nn.Module):
 		return self.lm_head(x)
 
 if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--resume", nargs="?", const="auto", default=None)
+	args = parser.parse_args()
+
 	train_path = os.path.abspath(config.train_data_dir)
 	valid_path = os.path.abspath(config.valid_data_dir)
 
-	train_file_list = DatasetManager.scan_directory(train_path)
-	valid_file_list = DatasetManager.scan_directory(valid_path)
+	train_file_list = DataManager.scan_directory(train_path)
+	valid_file_list = DataManager.scan_directory(valid_path)
 
 	if isinstance(config.unique_homophones, int) and isinstance(config.max_len, int):
 		max_len = config.max_len
 		cipher_vocab = config.unique_homophones
 	else:
-		max_len, cipher_vocab = DatasetManager.get_max_stats(train_file_list)
+		max_len, cipher_vocab = DataManager.get_max_stats(train_file_list)
 		if max_len == 0:
 			raise ValueError(f"No valid JSON data found in {train_path}.")
 
@@ -140,20 +142,31 @@ if __name__ == "__main__":
 		n_layers=config.n_layers,
 	).to("cuda")
 
-	timestamp = datetime.now().strftime("%d%m-%H%M")
-	os.makedirs(config.save_path, exist_ok=True)
-	checkpoint_file = Path(config.save_path) / f"mamba2_{timestamp}.pth"
-	model_config = Path(config.save_path) / f"config_{timestamp}.json"
-	with open(model_config, "w") as f:
-		json.dump(asdict(config), f, indent=4, default=str)
+	save_path = Path(config.save_path) 
+	save_path.mkdir(parents=True, exist_ok=True)
+
+	resume_path = None
+	target_exp_dir = None
+	
+	if args.resume == "auto":
+		resume_path = DataManager.get_latest_checkpoint(save_path)
+		if resume_path:
+			target_exp_dir = resume_path.parent
+			logger.info(f"Auto-detected checkpoint: {resume_path}")
+	elif args.resume:
+		resume_path = Path(args.resume)
+		target_exp_dir = resume_path.parent
 
 	trainer = MambaTrainer(
 		model=model,
 		train_loader=train_loader,
 		val_loader=val_loader,
 		config=config,
-		save_path=checkpoint_file
+		save_path=save_path,
+		exp_dir=target_exp_dir
 	)
 
-	logger.info("Training...")
+	if resume_path:
+		trainer.load_checkpoint(resume_path)
+	
 	trainer.train(epochs=config.epochs)

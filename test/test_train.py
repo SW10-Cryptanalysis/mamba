@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, mock_open
 from src.data.dataset import CipherDataset
-from src.utils.data_manager import DatasetManager
+from src.utils.data_manager import DataManager
 from src.config import Config
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def test_cipher_dataset_padding(mock_config):
     """Verify that the dataset correctly handles config and padding."""
     fake_files = [("fake_path.json", None)]
     
-    with patch("src.utils.data_manager.DatasetManager.load_sample") as mock_load:
+    with patch("src.utils.data_manager.DataManager.load_sample") as mock_load:
         mock_load.return_value = {
             "ciphertext": "1 2 3",
             "plaintext": "abc"

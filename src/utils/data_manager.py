@@ -8,7 +8,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 logger = logging.getLogger("utils/data_manager.py")
 
-class DatasetManager:
+class DataManager:
     @staticmethod
     def scan_directory(directory_path: Path) -> list[tuple[str, str | None]]:
         """Index all JSON files within a directory, supporting both raw files and ZIP archives.
@@ -65,7 +65,7 @@ class DatasetManager:
                 if processing is successful; None if the file is malformed or an error occurs.
         """
         try:
-            data = DatasetManager.load_sample(*path_tuple)
+            data = DataManager.load_sample(*path_tuple)
             
             ciphertext = data.get("ciphertext", [])
             if isinstance(ciphertext, str):
@@ -123,3 +123,11 @@ class DatasetManager:
             f"Scan complete. Max Seq Len: {max_length}, Highest Symbol ID: {max_symbols}"
         )
         return max_length, max_symbols
+    
+    @staticmethod
+    def get_latest_checkpoint(base_path: Path) -> Path | None:
+        """Searches all exp_* folders for the newest latest.pth file."""
+        checkpoints = list(base_path.glob("exp_*/latest.pth"))
+        if not checkpoints:
+            return None
+        return max(checkpoints, key=lambda p: p.stat().st_mtime)

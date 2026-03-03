@@ -7,7 +7,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from easy_logging import EasyFormatter
 from src.config import Config
-from src.utils.data_manager import DatasetManager
+from src.utils.data_manager import DataManager
 from src.data.dataset import CipherDataset
 from src.engine.solver import CipherSolver
 
@@ -29,7 +29,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     solver = CipherSolver(config)
     solver.load_checkpoint(model_path)
 
-    test_files = DatasetManager.scan_directory(test_dir)
+    test_files = DataManager.scan_directory(test_dir)
     test_dataset = CipherDataset(test_files, max_seq_len=config.max_len, tokenizer=solver.tokenizer, mode="eval")
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 

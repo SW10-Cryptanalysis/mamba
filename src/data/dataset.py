@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from ..utils.data_manager import DatasetManager
+from ..utils.data_manager import DataManager
 import logging
 
 logger = logging.getLogger("data/dataset.py")
@@ -25,7 +25,7 @@ class CipherDataset(Dataset):
         path, internal_name = self.file_paths[idx]
         
         try:
-            data = DatasetManager.load_sample(path, internal_name)
+            data = DataManager.load_sample(path, internal_name)
             
             ciphertext = data["ciphertext"]
             if isinstance(ciphertext, str):
