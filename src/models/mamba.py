@@ -5,7 +5,19 @@ from mamba_ssm.ops.triton.layer_norm import RMSNorm
 from src.config import Config
 
 class MambaModel(nn.Module):
-    """MambaCipherSolver model."""
+    """Mamba-based sequence model for cipher decryption.
+
+    This model uses the Mamba2 architecture to process sequences of cipher
+    homophones and predict the corresponding plaintext characters.
+
+    Attributes:
+        char_offset (int): The index where plaintext characters begin in the vocab.
+        embedding (nn.Embedding): Learnt embeddings for the input tokens.
+        layers (nn.ModuleList): A list of Mamba2 layers with RMSNorm.
+        norm_f (RMSNorm): Final normalization layer before the head.
+        lm_head (nn.Linear): Linear layer mapping hidden states to vocabulary logits.
+
+    """
 
     def __init__(
         self,
@@ -13,6 +25,14 @@ class MambaModel(nn.Module):
         char_offset: int,
         config: Config,
     ) -> None:
+        """Initialize the MambaModel.
+
+        Args:
+            vocab_size: Total number of tokens in the vocabulary.
+            char_offset: Offset used to separate cipher and plain tokens.
+            config: Configuration object with model hyperparameters.
+
+        """
         super().__init__()
         self.char_offset = char_offset
         self.embedding = nn.Embedding(vocab_size, config.d_model)
@@ -34,6 +54,15 @@ class MambaModel(nn.Module):
         self.lm_head = nn.Linear(config.d_model, vocab_size, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Perform a forward pass through the network.
+
+        Args:
+            x: Input tensor of token IDs with shape (batch_size, seq_len).
+
+        Returns:
+            Logits tensor with shape (batch_size, seq_len, vocab_size).
+
+        """
         x = self.embedding(x)
         for layer in self.layers:
             residual = x

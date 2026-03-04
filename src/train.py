@@ -13,7 +13,7 @@ from src.engine.trainer import MambaTrainer
 
 logger = get_logger("train.py")
 
-def train_model(resume_arg: str = None):
+def train_model(resume_arg: str = None) -> None:
     config = Config()
     save_path = Path(config.save_path)
     resume_path = None
@@ -47,7 +47,9 @@ def train_model(resume_arg: str = None):
     train_file_list = DataManager.scan_directory(os.path.abspath(config.train_data_dir))
     valid_file_list = DataManager.scan_directory(os.path.abspath(config.valid_data_dir))
 
-    if not (isinstance(config.unique_homophones, int) and isinstance(config.max_len, int)):
+    if not (
+        isinstance(config.unique_homophones, int) and isinstance(config.max_len, int)
+    ):
         max_len, _ = DataManager.get_max_stats(train_file_list)
     else:
         max_len = config.max_len

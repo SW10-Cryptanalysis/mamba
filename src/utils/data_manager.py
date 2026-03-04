@@ -8,12 +8,22 @@ from src.utils.logging import get_logger
 logger = get_logger("utils/data_manager.py")
 
 class DataManager:
+    """Utility class for dataset indexing, parsing, and statistical analysis.
+
+    Provides a centralized interface for handling both raw JSON files and
+    compressed ZIP archives, supporting multi-processed statistics calculation.
+
+    Attributes:
+        logger (Logger): The logging instance for tracking data operations.
+
+    """
+
     @staticmethod
     def scan_directory(directory_path: Path) -> list[tuple[str, str | None]]:
-        """Index all JSON files within a directory, supporting both raw files and ZIP archives.
+        """Index all JSON files within a directory.
 
         Args:
-            directory_path (Path): The filesystem path to the directory containing 
+            directory_path (Path): The filesystem path to the directory containing
                 the data files.
 
         Returns:
@@ -39,11 +49,11 @@ class DataManager:
 
     @staticmethod
     def load_sample(path: str, internal_name: str | None = None) -> dict:
-        """A unified interface for reading JSON data from either a direct file path or a ZIP archive.
+        """Read JSON data from either a direct file path or a ZIP archive.
 
         Args:
             path (str): The absolute filesystem path to the target file or ZIP archive.
-            internal_name (str | None): The name of the specific file inside the ZIP 
+            internal_name (str | None): The name of the specific file inside the ZIP
                 archive to be read. Defaults to None for non-compressed files.
 
         Returns:
@@ -61,12 +71,13 @@ class DataManager:
         """Process a JSON file and return the length and maximum value.
 
         Args:
-            path_tuple (tuple[str, str | None]): A tuple containing the absolute path 
-                to the file and an optional internal filename (if the file is inside a ZIP).
-            
+            path_tuple (tuple[str, str | None]): A tuple containing the absolute path
+                to the file and an optional internal filename.
+
         Returns:
-            tuple[int, int] | None: A tuple containing (sequence_length, max_symbol_id) 
-                if processing is successful; None if the file is malformed or an error occurs.
+            tuple[int, int] | None: A tuple containing (sequence_length, max_symbol_id)
+                if processing is successful;
+                None if the file is malformed or an error occurs.
 
         """
         try:
@@ -86,16 +97,18 @@ class DataManager:
 
     @classmethod
     def get_max_stats(cls, file_paths: list[tuple[str, str | None]]) -> tuple[int, int]:
-        """Calculate dataset-wide statistics across multiple files using parallel processing.
+        """Calculate dataset-wide statistics across multiple files in parallel.
 
         Args:
-            file_paths (list[tuple[str, str | None]]): A list of tuples where each 
-                tuple contains (absolute_path, internal_zip_name). If internal_zip_name 
-                is None, the file is treated as a standard disk file.
+            file_paths: A list of tuples where each tuple contains
+                (absolute_path, internal_zip_name).
 
         Returns:
-            tuple[int, int]: A tuple containing (max_sequence_length, max_symbol_id) 
-                found across the entire provided file list.
+            A tuple containing (max_sequence_length, max_symbol_id)
+            found across the entire provided file list.
+
+        Raises:
+            FileNotFoundError: If the provided file list is empty.
 
         """
         if not file_paths:
@@ -123,17 +136,27 @@ class DataManager:
 
         if skipped_count > 0:
             logger.warning(
-                f"\nFinished with warnings: {skipped_count} files were malformed and skipped.",
+                f"\nFinished with warnings: {skipped_count} files "
+                "were malformed and skipped.",
             )
 
         logger.info(
-            f"Scan complete. Max Seq Len: {max_length}, Highest Symbol ID: {max_symbols}",
+            f"Scan complete. Max Seq Len: {max_length}, "
+            f"Highest Symbol ID: {max_symbols}",
         )
         return max_length, max_symbols
 
     @staticmethod
     def get_latest_checkpoint(base_path: Path) -> Path | None:
-        """Searches all exp_* folders for the newest latest.pth file."""
+        """Search all exp_* folders for the newest latest.pth file.
+
+        Args:
+            base_path: The root directory containing experiment folders.
+
+        Returns:
+            The path to the most recent checkpoint, or None if none are found.
+
+        """
         checkpoints = list(base_path.glob("exp_*/latest.pth"))
         if not checkpoints:
             return None

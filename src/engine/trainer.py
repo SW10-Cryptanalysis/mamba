@@ -8,20 +8,55 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
+from src.config import Config
 from src.utils.logging import get_logger
 logger = get_logger("engine/trainer.py")
 
 class MambaTrainer:
+    """Trainer class for Mamba-based cipher models.
+
+    This class encapsulates the training loop, validation logic, checkpointing,
+    and learning rate scheduling. It automatically handles experiment directory
+    creation and configuration logging.
+
+    Attributes:
+        model (nn.Module): The Mamba model to be trained.
+        train_loader (DataLoader): Iterable for the training dataset.
+        val_loader (DataLoader): Iterable for the validation dataset.
+        config (Config): Configuration object containing hyperparameters.
+        save_path (Path): Base directory where all experiments are saved.
+        exp_dir (Path): Specific directory for the current experiment run.
+        device (str): Computation device (e.g., 'cuda' or 'cpu').
+        criterion (nn.Module): The loss function (CrossEntropyLoss).
+        optimizer (optim.Optimizer): The AdamW optimizer.
+        scheduler (optim.lr_scheduler): Learning rate scheduler.
+        history (dict): Log of losses and learning rates throughout training.
+
+    """
+
     def __init__(
         self,
         model: nn.Module,
         train_loader: DataLoader,
         val_loader: DataLoader,
-        config,
+        config: Config,
         save_path: Path,
         exp_dir: Path = None,
         device: str = "cuda",
-    ):
+    ) -> None:
+        """Initialize the trainer with model, data, and experimental settings.
+
+        Args:
+            model: The neural network model to train.
+            train_loader: DataLoader providing training samples.
+            val_loader: DataLoader providing validation samples.
+            config: Config instance containing training hyperparameters.
+            save_path: Path where experiment folders will be created.
+            exp_dir: Optional path to an existing experiment directory 
+                (used for resuming).
+            device: Device to use for training. Defaults to "cuda".
+
+        """
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
