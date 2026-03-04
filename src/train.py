@@ -11,6 +11,7 @@ from src.data.dataset import CipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
 
+
 logger = get_logger("train.py")
 
 def resolve_config(
@@ -82,7 +83,7 @@ def get_loaders(
     )
     return train_loader, val_loader
 
-def train_model(resume_arg: str | None = None) -> None:
+def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
     """Execute the full training pipeline."""
     config = Config()
     resume_path, target_exp_dir = resolve_config(resume_arg, config)
@@ -94,7 +95,7 @@ def train_model(resume_arg: str | None = None) -> None:
         vocab_size=tokenizer.vocab_size,
         char_offset=tokenizer.char_offset,
         config=config,
-    ).to("cuda")
+    ).to(device)
 
     trainer = MambaTrainer(
         model=model,

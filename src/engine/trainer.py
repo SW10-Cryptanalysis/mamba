@@ -99,7 +99,7 @@ class MambaTrainer:
         history_path = self.exp_dir / "history.json"
         with open(history_path, "w") as f:
             json.dump(self.history, f, indent=4)
-        logger.debug(f"History updated at {history_path}")
+        logger.info(f"History updated at {history_path}")
 
     def _save_checkpoint(self, val_loss: float, is_best: bool) -> None:
         """Save a model checkpoint and update the 'latest' and 'best' files.

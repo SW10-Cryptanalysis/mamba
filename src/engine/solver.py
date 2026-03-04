@@ -1,5 +1,4 @@
 from typing import Any
-
 import torch
 from pathlib import Path
 from src.models.mamba import MambaModel
