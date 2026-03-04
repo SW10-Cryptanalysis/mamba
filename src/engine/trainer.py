@@ -52,7 +52,7 @@ class MambaTrainer:
             val_loader: DataLoader providing validation samples.
             config: Config instance containing training hyperparameters.
             save_path: Path where experiment folders will be created.
-            exp_dir: Optional path to an existing experiment directory 
+            exp_dir: Optional path to an existing experiment directory
                 (used for resuming).
             device: Device to use for training. Defaults to "cuda".
 
@@ -87,24 +87,34 @@ class MambaTrainer:
         self.best_val_loss = float("inf")
         self.current_epoch = 0
 
-    def _save_config(self):
+    def _save_config(self) -> None:
+        """Save the current configuration to a JSON file."""
         config_path = self.exp_dir / "config.json"
         with open(config_path, "w") as f:
             json.dump(asdict(self.config), f, indent=4, default=str)
         logger.info(f"Experiment config saved to {config_path}")
 
-    def _save_history(self):
-        """Saves the current training history to a JSON file."""
+    def _save_history(self) -> None:
+        """Save the current training history to a JSON file."""
         history_path = self.exp_dir / "history.json"
         with open(history_path, "w") as f:
             json.dump(self.history, f, indent=4)
         logger.debug(f"History updated at {history_path}")
 
-    def _save_checkpoint(self, val_loss: float, is_best: bool):
+    def _save_checkpoint(self, val_loss: float, is_best: bool) -> None:
+        """Save a model checkpoint and update the 'latest' and 'best' files.
+
+        Args:
+            val_loss: The validation loss achieved in the current epoch.
+            is_best: A flag indicating if this model achieved the lowest
+                validation loss seen so far.
+
+        """
         state = {
             "epoch": self.current_epoch,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
             "val_loss": val_loss,
             "char_offset": self.model.char_offset,
             "d_model": self.config.d_model,
@@ -121,9 +131,21 @@ class MambaTrainer:
         if is_best:
             best_path = self.exp_dir / "best.pth"
             shutil.copyfile(epoch_path, best_path)
-            logger.info(f"Updated best model at epoch {self.current_epoch} (Loss: {val_loss:.4f})")
+            logger.info(
+                f"Updated best model at epoch {self.current_epoch} "
+                f"(Loss: {val_loss:.4f})",
+            )
 
-    def load_checkpoint(self, checkpoint_path: Path):
+    def load_checkpoint(self, checkpoint_path: Path) -> "MambaTrainer":
+        """Restore the trainer state from a saved checkpoint file.
+
+        Args:
+            checkpoint_path: The filesystem path to the .pth checkpoint file.
+
+        Returns:
+            The MambaTrainer instance (self).
+
+        """
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -141,8 +163,13 @@ class MambaTrainer:
 
         return self
 
-    def train(self, epochs: int):
-        """Main entry point for training."""
+    def train(self, epochs: int) -> None:
+        """Execute the main training loop for a specified number of epochs.
+
+        Args:
+            epochs: The total number of epochs to train for.
+
+        """
         start_epoch = self.current_epoch
 
         for epoch in range(start_epoch, epochs):
@@ -179,7 +206,11 @@ class MambaTrainer:
     def _train_one_epoch(self) -> float:
         self.model.train()
         total_loss = 0
-        loop = tqdm(self.train_loader, desc=f"Epoch {self.current_epoch} [Train]", leave=False)
+        loop = tqdm(
+            self.train_loader,
+            desc=f"Epoch {self.current_epoch} [Train]",
+            leave=False,
+        )
 
         for cipher, plain in loop:
             cipher, plain = cipher.to(self.device), plain.to(self.device)
@@ -203,7 +234,9 @@ class MambaTrainer:
             for cipher, plain in self.val_loader:
                 cipher, plain = cipher.to(self.device), plain.to(self.device)
                 outputs = self.model(cipher)
-                loss = self.criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
+                loss = self.criterion(
+                    outputs.view(-1, outputs.size(-1)), plain.view(-1),
+                )
                 total_loss += loss.item()
 
         return total_loss / len(self.val_loader)
