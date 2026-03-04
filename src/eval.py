@@ -18,10 +18,10 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             logger.error(f"No models found in {config.save_path}")
             return
         model_path = Path(max(list_of_files, key=os.path.getmtime))
-    
-    model_dir = model_path.parent 
+
+    model_dir = model_path.parent
     print(f"Eval on model: {model_path}")
-    
+
     solver = CipherSolver(config)
     solver.load_checkpoint(model_path)
 
@@ -35,10 +35,10 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
     for cipher_tensor, ground_truth, metadata in test_loader:
         raw_cipher = cipher_tensor.squeeze(0).tolist()
-        
+
         current_ground_truth = ground_truth[0]
-        current_path = metadata['path'][0]
-        current_internal = metadata['internal_name'][0] if metadata['internal_name'][0] else ""
+        current_path = metadata["path"][0]
+        current_internal = metadata["internal_name"][0] if metadata["internal_name"][0] else ""
         filename = f"{os.path.basename(current_path)}/{current_internal}" if current_internal else os.path.basename(current_path)
 
         deciphered_text = solver.decrypt(raw_cipher)
@@ -53,7 +53,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
     full_model_name = model_path.stem
     output_filename = model_dir / f"eval_{full_model_name}.json"
-    
+
     with open(output_filename, "w") as f:
         json.dump(results, f, indent=4)
     logger.info(f"\nResults saved to {output_filename}")
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     config_json = exp_dir / "config.json"
     if config_json.exists():
         logger.info(f"Loading experiment config from {config_json}")
-        with open(config_json, "r") as f:
+        with open(config_json) as f:
             saved_dict = json.load(f)
             for k, v in saved_dict.items():
                 if hasattr(config, k):

@@ -20,7 +20,7 @@ class MambaTrainer:
         config,
         save_path: Path,
         exp_dir: Path = None,
-        device: str = "cuda"
+        device: str = "cuda",
     ):
         self.model = model
         self.train_loader = train_loader
@@ -28,7 +28,7 @@ class MambaTrainer:
         self.config = config
         self.save_path = save_path
         self.device = device
-        
+
         if exp_dir:
             self.exp_dir = exp_dir
             self.timestamp = exp_dir.name.replace("exp_", "")
@@ -44,9 +44,9 @@ class MambaTrainer:
             self.optimizer,
             mode="min",
             factor=config.factor,
-            patience=config.patience
+            patience=config.patience,
         )
-        
+
         self.history = {"train_loss": [], "val_loss": [], "learning_rates": []}
 
         self.best_val_loss = float("inf")
@@ -75,7 +75,7 @@ class MambaTrainer:
             "d_model": self.config.d_model,
             "n_layers": self.config.n_layers,
         }
-        
+
         epoch_filename = f"epoch_{self.current_epoch:03d}.pth"
         epoch_path = self.exp_dir / epoch_filename
         torch.save(state, epoch_path)
@@ -92,30 +92,30 @@ class MambaTrainer:
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        
-        self.current_epoch = checkpoint["epoch"] 
+
+        self.current_epoch = checkpoint["epoch"]
         self.best_val_loss = checkpoint.get("val_loss", float("inf"))
-        
+
         if "scheduler_state_dict" in checkpoint:
              self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-             
+
         history_path = self.exp_dir / "history.json"
         if history_path.exists():
-            with open(history_path, "r") as f:
+            with open(history_path) as f:
                 self.history = json.load(f)
-        
+
         return self
 
     def train(self, epochs: int):
         """Main entry point for training."""
-        start_epoch = self.current_epoch 
-        
+        start_epoch = self.current_epoch
+
         for epoch in range(start_epoch, epochs):
             self.current_epoch = epoch + 1
-            
+
             avg_train_loss = self._train_one_epoch()
             avg_val_loss = self._validate_one_epoch()
-            
+
             current_lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step(avg_val_loss)
 
@@ -128,13 +128,13 @@ class MambaTrainer:
             logger.info(
                 f"Epoch [{self.current_epoch}/{epochs}] - "
                 f"Train Loss: {avg_train_loss:.4f} | "
-                f"Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}"
+                f"Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}",
             )
 
             is_best = avg_val_loss < self.best_val_loss
             if is_best:
                 self.best_val_loss = avg_val_loss
-            
+
             self._save_checkpoint(avg_val_loss, is_best)
 
             if current_lr < 1e-7:
@@ -148,14 +148,14 @@ class MambaTrainer:
 
         for cipher, plain in loop:
             cipher, plain = cipher.to(self.device), plain.to(self.device)
-            
+
             self.optimizer.zero_grad()
             outputs = self.model(cipher)
-            
+
             loss = self.criterion(outputs.view(-1, outputs.size(-1)), plain.view(-1))
             loss.backward()
             self.optimizer.step()
-            
+
             total_loss += loss.item()
             loop.set_postfix(loss=loss.item())
 

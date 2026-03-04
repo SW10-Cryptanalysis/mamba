@@ -18,7 +18,7 @@ def train_model(resume_arg: str = None):
     save_path = Path(config.save_path)
     resume_path = None
     target_exp_dir = None
-    
+
     if resume_arg == "auto":
         resume_path = DataManager.get_latest_checkpoint(save_path)
         if resume_path:
@@ -35,7 +35,7 @@ def train_model(resume_arg: str = None):
         config_json = target_exp_dir / "config.json"
         if config_json.exists():
             logger.info(f"Resuming: syncing architecture from {config_json}")
-            with open(config_json, "r") as f:
+            with open(config_json) as f:
                 config_dict = json.load(f)
                 for key, value in config_dict.items():
                     if hasattr(config, key):
@@ -46,7 +46,7 @@ def train_model(resume_arg: str = None):
     tokenizer = CipherTokenizer(config)
     train_file_list = DataManager.scan_directory(os.path.abspath(config.train_data_dir))
     valid_file_list = DataManager.scan_directory(os.path.abspath(config.valid_data_dir))
-    
+
     if not (isinstance(config.unique_homophones, int) and isinstance(config.max_len, int)):
         max_len, _ = DataManager.get_max_stats(train_file_list)
     else:
@@ -76,7 +76,7 @@ def train_model(resume_arg: str = None):
     model = MambaModel(
         vocab_size=tokenizer.vocab_size,
         char_offset=tokenizer.char_offset,
-        config=config
+        config=config,
     ).to("cuda")
 
     trainer = MambaTrainer(
@@ -85,17 +85,17 @@ def train_model(resume_arg: str = None):
         val_loader=val_loader,
         config=config,
         save_path=save_path,
-        exp_dir=target_exp_dir
+        exp_dir=target_exp_dir,
     )
 
     if resume_path:
         trainer = trainer.load_checkpoint(resume_path)
-    
+
     trainer.train(epochs=config.epochs)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", nargs="?", const="auto", default=None)
     args = parser.parse_args()
-    
+
     train_model(resume_arg=args.resume)

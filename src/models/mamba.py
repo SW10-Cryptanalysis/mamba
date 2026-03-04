@@ -6,11 +6,12 @@ from src.config import Config
 
 class MambaModel(nn.Module):
     """MambaCipherSolver model."""
+
     def __init__(
         self,
         vocab_size: int,
         char_offset: int,
-        config: Config
+        config: Config,
     ) -> None:
         super().__init__()
         self.char_offset = char_offset
