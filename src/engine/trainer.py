@@ -37,9 +37,7 @@ class MambaTrainer:
             self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
             self.exp_dir = save_path / f"exp_{self.timestamp}"
             self.exp_dir.mkdir(parents=True, exist_ok=True)
-            self.save_config()
-        
-        self.save_config()
+            self._save_config()
 
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
@@ -55,20 +53,20 @@ class MambaTrainer:
         self.best_val_loss = float("inf")
         self.current_epoch = 0
 
-    def save_config(self):
+    def _save_config(self):
         config_path = self.exp_dir / "config.json"
         with open(config_path, "w") as f:
             json.dump(asdict(self.config), f, indent=4, default=str)
         logger.info(f"Experiment config saved to {config_path}")
 
-    def save_history(self):
+    def _save_history(self):
         """Saves the current training history to a JSON file."""
         history_path = self.exp_dir / "history.json"
         with open(history_path, "w") as f:
             json.dump(self.history, f, indent=4)
         logger.debug(f"History updated at {history_path}")
 
-    def save_checkpoint(self, val_loss: float, is_best: bool):
+    def _save_checkpoint(self, val_loss: float, is_best: bool):
         state = {
             "epoch": self.current_epoch,
             "model_state_dict": self.model.state_dict(),
@@ -126,7 +124,7 @@ class MambaTrainer:
             self.history["val_loss"].append(avg_val_loss)
             self.history["learning_rates"].append(current_lr)
 
-            self.save_history()
+            self._save_history()
 
             logger.info(
                 f"Epoch [{self.current_epoch}/{epochs}] - "
@@ -138,7 +136,7 @@ class MambaTrainer:
             if is_best:
                 self.best_val_loss = avg_val_loss
             
-            self.save_checkpoint(avg_val_loss, is_best)
+            self._save_checkpoint(avg_val_loss, is_best)
 
             if current_lr < 1e-7:
                 logger.info("Learning rate too low. Stopping early.")

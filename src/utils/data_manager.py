@@ -54,7 +54,7 @@ class DataManager:
             return json.load(f)
 
     @staticmethod
-    def process_json(path_tuple: tuple[str, str | None]) -> tuple[int, int] | None:
+    def _process_json(path_tuple: tuple[str, str | None]) -> tuple[int, int] | None:
         """Process a JSON file and return the length and maximum value.
         Args:
             path_tuple (tuple[str, str | None]): A tuple containing the absolute path 
@@ -98,7 +98,7 @@ class DataManager:
         
         with ProcessPoolExecutor() as executor:
             results = list(tqdm(
-                executor.map(cls.process_json, file_paths), 
+                executor.map(cls._process_json, file_paths), 
                 total=len(file_paths), 
                 desc="Analyzing Stats"
             ))
