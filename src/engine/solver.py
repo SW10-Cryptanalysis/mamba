@@ -1,6 +1,6 @@
 import torch
 from pathlib import Path
-from src.train import MambaModel
+from src.models.mamba import MambaModel
 from src.data.tokenizer import CipherTokenizer
 from src.utils.logging import get_logger
 logger = get_logger("engine/solver.py")
