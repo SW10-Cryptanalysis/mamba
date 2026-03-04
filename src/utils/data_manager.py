@@ -1,12 +1,11 @@
 import os
 import json
 import zipfile
-import logging
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
-
-logger = logging.getLogger("utils/data_manager.py")
+from src.utils.logging import get_logger
+logger = get_logger("utils/data_manager.py")
 
 class DataManager:
     @staticmethod

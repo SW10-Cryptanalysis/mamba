@@ -6,8 +6,7 @@ from mamba_ssm import Mamba2
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
 import os
 import argparse
-import logging
-from easy_logging import EasyFormatter
+from src.utils.logging import get_logger
 from pathlib import Path
 from src.config import Config
 from src.utils.data_manager import DataManager
@@ -15,10 +14,7 @@ from src.data.dataset import CipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
 
-handler = logging.StreamHandler()
-handler.setFormatter(EasyFormatter())
-logger = logging.getLogger("train.py")
-logger.addHandler(handler)
+logger = get_logger("train.py")
 
 class MambaModel(nn.Module):
 	"""MambaCipherSolver model.

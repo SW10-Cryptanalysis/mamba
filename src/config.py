@@ -1,15 +1,5 @@
 from dataclasses import dataclass
-import os
-import json
 from pathlib import Path
-from easy_logging import EasyFormatter
-import logging
-
-handler = logging.StreamHandler()
-handler.setFormatter(EasyFormatter())
-logger = logging.getLogger("config.py")
-logger.addHandler(handler)
-
 
 @dataclass
 class Config:

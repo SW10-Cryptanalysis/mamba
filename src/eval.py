@@ -2,21 +2,14 @@ import os
 import json
 import glob
 import argparse
-import logging
 from pathlib import Path
 from torch.utils.data import DataLoader
-from easy_logging import EasyFormatter
 from src.config import Config
 from src.utils.data_manager import DataManager
 from src.data.dataset import CipherDataset
 from src.engine.solver import CipherSolver
-
-handler = logging.StreamHandler()
-handler.setFormatter(EasyFormatter())
-logger = logging.getLogger("eval.py")
-logger.addHandler(handler)
-
-config = Config()
+from src.utils.logging import get_logger
+logger = get_logger("eval.py")
 
 def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     if model_path is None:
@@ -57,8 +50,6 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             "predicted": deciphered_text,
             "ser": symbol_err_rate,
         })
-
-        logger.info(f"File: {filename} | SER: {symbol_err_rate:.4f} | Predicted: {deciphered_text}")
 
     full_model_name = model_path.stem
     output_filename = model_dir / f"eval_{full_model_name}.json"

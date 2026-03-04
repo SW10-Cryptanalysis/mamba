@@ -1,8 +1,7 @@
 from torch.utils.data import Dataset
 from ..utils.data_manager import DataManager
-import logging
-
-logger = logging.getLogger("data/dataset.py")
+from src.utils.logging import get_logger
+logger = get_logger("data/dataset.py")
 
 class CipherDataset(Dataset):
     """

@@ -1,8 +1,9 @@
 import torch
-import os
 from pathlib import Path
 from src.train import MambaModel
 from src.data.tokenizer import CipherTokenizer
+from src.utils.logging import get_logger
+logger = get_logger("engine/solver.py")
 
 class CipherSolver:
     """
@@ -18,6 +19,7 @@ class CipherSolver:
 
     def load_checkpoint(self, checkpoint_path: Path):
         """Automates model instantiation and weight loading from a .pth file."""
+        logger.info(f"Loading checkpoint from: {checkpoint_path}")
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"No checkpoint found at {checkpoint_path}")
 
@@ -25,6 +27,8 @@ class CipherSolver:
         
         char_offset = checkpoint["char_offset"]
         vocab_size = char_offset + self.config.plain_vocab_size + self.config.buffer
+
+        logger.debug(f"Instantiating MambaModel: vocab_size={vocab_size}, char_offset={char_offset}")
 
         self.model = MambaModel(
             vocab_size=vocab_size,
@@ -47,7 +51,9 @@ class CipherSolver:
 
         if isinstance(ciphertext, str):
             ciphertext = [int(x) for x in ciphertext.split()]
-        
+
+        logger.debug(f"Decrypting sequence of length {len(ciphertext)}")
+
         input_tensor = self.tokenizer.pad_sequence(ciphertext, self.config.max_len).unsqueeze(0).to(self.device)
 
         logits = self.model(input_tensor)

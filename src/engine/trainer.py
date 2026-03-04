@@ -8,9 +8,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
-import logging
-
-logger = logging.getLogger("engine/trainer.py")
+from src.utils.logging import get_logger
+logger = get_logger("engine/trainer.py")
 
 class MambaTrainer:
     def __init__(
