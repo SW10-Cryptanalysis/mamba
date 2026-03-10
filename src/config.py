@@ -67,4 +67,4 @@ class Config:
 	plain_vocab_size: int = 26
 	unique_homophones: int = 2494
 	max_len: int = 12_000
-	buffer: int = 1
+	buffer: int = 10

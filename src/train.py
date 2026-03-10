@@ -54,8 +54,8 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
 
     if is_arrow:
         logger.info(f"Arrow format detected. Using PretokenizedCipherDataset.")
-        train_ds = PretokenizedCipherDataset(train_path, max_seq_len=config.max_len)
-        val_ds = PretokenizedCipherDataset(valid_path, max_seq_len=config.max_len)
+        train_ds = PretokenizedCipherDataset(train_path, max_seq_len=config.max_len, config=config)
+        val_ds = PretokenizedCipherDataset(valid_path, max_seq_len=config.max_len, config=config)
     else:
         logger.info(f"Legacy format detected. Scanning directory for JSON/ZIPs...")
         train_files = DataManager.scan_directory(train_path)

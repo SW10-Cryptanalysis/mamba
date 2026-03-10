@@ -26,6 +26,7 @@ class CipherTokenizer:
         self.config = config
         self.pad_token_id = 0
         self.sep_token_id = config.unique_homophones + 1
+        self.space_token_id = config.unique_homophones + 2
         self.eos_token_id = config.unique_homophones + 4
         self.char_offset = self.sep_token_id + 1
 
@@ -37,6 +38,9 @@ class CipherTokenizer:
             i + self.char_offset: chr(i + 97) 
             for i in range(26)
         }
+
+        self.char_to_id[" "] = self.space_token_id
+        self.id_to_char[self.space_token_id] = " "
 
     def pad_sequence(self, ids: list[int], max_len: int) -> torch.Tensor:
         """Handle truncation and padding, returning a LongTensor.
