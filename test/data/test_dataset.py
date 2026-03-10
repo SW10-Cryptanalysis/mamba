@@ -30,13 +30,13 @@ def test_dataset_train_mode(mock_load, sample_file_paths, tokenizer):
     }
 
     dataset = CipherDataset(sample_file_paths, max_seq_len=10, tokenizer=tokenizer, mode="train")
-    
+
     batch = dataset[0]
     input_ids = batch["input_ids"]
     labels = batch["labels"]
 
     expected_content_len = 7
-    
+
     assert input_ids.shape[0] == expected_content_len
     assert labels.shape[0] == expected_content_len
 

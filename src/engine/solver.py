@@ -99,8 +99,8 @@ class CipherSolver:
             The method automatically appends a SEP token if one is not present in 
             the input, signaling the model to begin the transition from cipher 
             processing to plaintext generation.
-        """
 
+        """
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
@@ -108,7 +108,7 @@ class CipherSolver:
 
         if isinstance(input_ids, str):
             input_ids = [int(x) for x in input_ids.split()]
-        
+
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids], dtype=torch.long).to(self.device)
         elif input_ids.dim() == 1:
@@ -125,7 +125,7 @@ class CipherSolver:
         generated = input_ids
         with torch.no_grad():
             for _ in range(max_new_tokens):
-                logits = self.model(generated) 
+                logits = self.model(generated)
                 next_token_logits = logits[:, -1, :]
                 next_token = torch.argmax(next_token_logits, dim=-1).view(1, 1)
                 generated = torch.cat([generated, next_token], dim=1)

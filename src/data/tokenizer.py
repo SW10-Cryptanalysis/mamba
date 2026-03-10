@@ -27,9 +27,9 @@ class CipherTokenizer:
 
         self.char_to_id = {" ": self.space_token_id}
         self.id_to_char = {self.space_token_id: " "}
-        
+
         for i in range(26):
-            char = chr(ord('a') + i)
+            char = chr(ord("a") + i)
             token_id = self.char_offset + i
             self.char_to_id[char] = token_id
             self.id_to_char[token_id] = char
@@ -62,8 +62,8 @@ class CipherTokenizer:
 
         """
         return [
-            self.char_to_id[c] 
-            for c in text.lower() 
+            self.char_to_id[c]
+            for c in text.lower()
             if c in self.char_to_id
         ]
 
@@ -77,19 +77,20 @@ class CipherTokenizer:
         Returns:
             str: The decoded string containing only mapped characters, 
                 excluding PAD, SEP, and EOS tokens.
+
         """
         if isinstance(ids, torch.Tensor):
             ids = ids.view(-1).tolist()
 
         special_tokens = {
-            self.pad_token_id, 
+            self.pad_token_id,
             self.sep_token_id,
-            self.eos_token_id
+            self.eos_token_id,
         }
 
         return "".join([
-            self.id_to_char[i] 
-            for i in ids 
+            self.id_to_char[i]
+            for i in ids
             if i in self.id_to_char and i not in special_tokens
         ])
 

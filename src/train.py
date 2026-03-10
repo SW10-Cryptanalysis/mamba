@@ -47,28 +47,27 @@ def resolve_config(resume_arg: str | None, config: Config, run_type: str) -> tup
 
 def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader, DataLoader]:
     """Initialize training and validation data loaders with format detection."""
-    
     train_path = Path(config.train_data_dir).resolve()
     valid_path = Path(config.valid_data_dir).resolve()
 
     is_arrow = (train_path / "dataset_info.json").exists() or any(train_path.glob("*.arrow"))
 
     if is_arrow:
-        logger.info(f"Arrow format detected. Using PretokenizedCipherDataset.")
+        logger.info("Arrow format detected. Using PretokenizedCipherDataset.")
         train_ds = PretokenizedCipherDataset(train_path, max_seq_len=config.max_len, config=config)
         val_ds = PretokenizedCipherDataset(valid_path, max_seq_len=config.max_len, config=config)
     else:
-        logger.info(f"Legacy format detected. Scanning directory for JSON/ZIPs...")
+        logger.info("Legacy format detected. Scanning directory for JSON/ZIPs...")
         train_files = DataManager.scan_directory(train_path)
         valid_files = DataManager.scan_directory(valid_path)
-        
+
         train_ds = CipherDataset(train_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
         val_ds = CipherDataset(valid_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
 
     collate_fn = partial(
-        DataManager.safe_pad_collate, 
+        DataManager.safe_pad_collate,
         pad_token_id=tokenizer.pad_token_id,
-        ignore_index=-100
+        ignore_index=-100,
     )
 
     num_workers = max(1, (os.cpu_count() or 1) - 4)
@@ -120,7 +119,7 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
         save_path=Path(config.save_path),
         run_type=run_type,
         exp_dir=target_exp_dir,
-        device=device
+        device=device,
     )
 
     if resume_path:

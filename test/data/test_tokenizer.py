@@ -1,5 +1,4 @@
 import pytest
-import torch
 from src.data.tokenizer import CipherTokenizer
 from src.config import Config
 
@@ -21,7 +20,7 @@ def test_initialization_offsets(tokenizer):
     assert tokenizer.space_token_id == tokenizer.config.unique_homophones + 2
     # Alphabet starts after Space
     assert tokenizer.char_offset == tokenizer.config.unique_homophones + 5
-    
+
     assert tokenizer.id_to_char[tokenizer.char_offset] == "a"
     assert tokenizer.id_to_char[tokenizer.space_token_id] == " "
 

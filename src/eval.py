@@ -53,7 +53,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
         logger.info(f"Arrow format detected at {test_dir}. Using PretokenizedCipherDataset.")
         test_dataset = PretokenizedCipherDataset(test_dir, max_seq_len=config.max_len, config=config)
     else:
-        logger.info(f"Legacy format detected. Scanning directory...")
+        logger.info("Legacy format detected. Scanning directory...")
         test_files = DataManager.scan_directory(test_dir)
         test_dataset = CipherDataset(
             test_files,
@@ -78,7 +78,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             sep_id = solver.tokenizer.sep_token_id
             if sep_id in input_ids:
                 sep_idx = input_ids.index(sep_id)
-                raw_cipher = input_ids[:sep_idx + 1] 
+                raw_cipher = input_ids[:sep_idx + 1]
             else:
                 raw_cipher = input_ids
 
@@ -92,7 +92,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             cipher_tensor, ground_truth, metadata = batch
             raw_cipher = cipher_tensor.squeeze(0).tolist()
             current_ground_truth = ground_truth[0]
-            
+
             current_path = metadata["path"][0]
             current_internal = metadata.get("internal_name", [""])[0]
             base = os.path.basename(current_path)
@@ -147,6 +147,6 @@ if __name__ == "__main__":
             for k, v in saved_dict.items():
                 if hasattr(config, k):
                     setattr(config, k, v)
-    
+
     test_dir = config.tok_test_spaced if args.spaces else config.tok_test_normal
     test_model(test_dir=test_dir, model_path=model_path)

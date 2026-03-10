@@ -75,7 +75,7 @@ class CipherDataset(Dataset):
             ciphertext = data["ciphertext"]
             if isinstance(ciphertext, str):
                 ciphertext = [int(x) for x in ciphertext.split()]
-            
+
             if self.mode == "eval":
                 sep_id = self.tokenizer.sep_token_id
                 eval_input = ciphertext + [sep_id]
@@ -84,14 +84,14 @@ class CipherDataset(Dataset):
                     "path": str(path),
                     "internal_name": internal_name if internal_name is not None else "",
                 }
-                
+
                 return torch.tensor(eval_input, dtype=torch.long), data["plaintext"], metadata
 
             encoded_plain = self.tokenizer.encode(data["plaintext"])
             sep_id = self.tokenizer.sep_token_id
 
             full_input = ciphertext + [sep_id] + encoded_plain
-            
+
             full_labels = ([-100] * (len(ciphertext) + 1)) + encoded_plain
 
             full_input = full_input[:self.max_seq_len]
@@ -99,7 +99,7 @@ class CipherDataset(Dataset):
 
             return {
                 "input_ids": torch.tensor(full_input, dtype=torch.long),
-                "labels": torch.tensor(full_labels, dtype=torch.long)
+                "labels": torch.tensor(full_labels, dtype=torch.long),
             }
 
         except Exception as e:
@@ -117,14 +117,14 @@ class PretokenizedCipherDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataset[idx]
-        
+
         input_ids = item["input_ids"]
         labels = item["labels"]
 
         sep_id = self.sep_token_id
-        
+
         input_list = input_ids.tolist() if torch.is_tensor(input_ids) else list(input_ids)
-        
+
         if sep_id in input_list:
             sep_idx = input_list.index(sep_id)
             new_labels = ([-100] * (sep_idx + 1)) + input_list[sep_idx + 1:]
@@ -133,5 +133,5 @@ class PretokenizedCipherDataset(Dataset):
 
         return {
             "input_ids": torch.tensor(input_list, dtype=torch.long),
-            "labels": torch.tensor(new_labels, dtype=torch.long)
+            "labels": torch.tensor(new_labels, dtype=torch.long),
         }
