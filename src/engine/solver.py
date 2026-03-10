@@ -78,39 +78,69 @@ class CipherSolver:
         return self
 
     @torch.no_grad()
-    def decrypt(self, ciphertext: list[int] | str) -> str:
-        """High-level API: Take raw ciphertext and return a human-readable string.
+    def decrypt(self, input_ids: list[int] | torch.Tensor, max_new_tokens: int = 512) -> str:
+        """Performs autoregressive decryption of ciphertext using the Mamba model.
+
+        This method handles both legacy ciphertext-only inputs and unified sequences 
+        containing a separator.
 
         Args:
-            ciphertext: A list of integers or a space-separated string of homophones.
+            input_ids: The sequence to decrypt. Can be a list of integer token IDs 
+                or a torch.Tensor. If a unified sequence (Cipher + SEP 
+                + Plain) is provided, tokens after the SEP are discarded before 
+                generation begins.
+            max_new_tokens: The maximum number of plaintext tokens to generate 
+                beyond the separator. Defaults to 512.
 
         Returns:
-            The decrypted plaintext string truncated to match input length.
+            str: The decrypted plaintext string, decoded via the tokenizer.
 
-        Raises:
-            RuntimeError: If called before load_checkpoint().
-
+        Note:
+            The method automatically appends a SEP token if one is not present in 
+            the input, signaling the model to begin the transition from cipher 
+            processing to plaintext generation.
         """
+
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
-        if isinstance(ciphertext, str):
-            ciphertext = [int(x) for x in ciphertext.split()]
+        self.model.eval()
 
-        logger.debug(f"Decrypting sequence of length {len(ciphertext)}")
+        if isinstance(input_ids, str):
+            input_ids = [int(x) for x in input_ids.split()]
+        
+        if isinstance(input_ids, list):
+            input_ids = torch.tensor([input_ids], dtype=torch.long).to(self.device)
+        elif input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0).to(self.device)
 
-        input_tensor = (
-            self.tokenizer.pad_sequence(ciphertext, self.config.max_len)
-            .unsqueeze(0)
-            .to(self.device)
-        )
+        sep_id = self.tokenizer.sep_token_id
+        if sep_id in input_ids[0]:
+            sep_idx = (input_ids[0] == sep_id).nonzero(as_tuple=True)[0][0]
+            input_ids = input_ids[:, :sep_idx + 1]
+        else:
+            sep_tensor = torch.tensor([[sep_id]], device=self.device)
+            input_ids = torch.cat([input_ids, sep_tensor], dim=1)
 
-        logits = self.model(input_tensor)
-        pred_indices = torch.argmax(logits, dim=-1).squeeze(0).tolist()
+        generated = input_ids
+        with torch.no_grad():
+            for _ in range(max_new_tokens):
+                logits = self.model(generated) 
+                next_token_logits = logits[:, -1, :]
+                next_token = torch.argmax(next_token_logits, dim=-1).view(1, 1)
+                generated = torch.cat([generated, next_token], dim=1)
 
-        full_decoded = self.tokenizer.decode(pred_indices)
+                if next_token.item() == self.tokenizer.eos_token_id:
+                    break
 
-        return full_decoded[:len(ciphertext)]
+        all_ids = generated.squeeze(0).tolist()
+        try:
+            sep_pos = all_ids.index(sep_id)
+            plaintext_ids = all_ids[sep_pos + 1:]
+        except ValueError:
+            plaintext_ids = all_ids
+
+        return self.tokenizer.decode(plaintext_ids)
 
     def calculate_ser(self, pred: str, target: str) -> float:
         """Calculate Symbol Error Rate (SER).

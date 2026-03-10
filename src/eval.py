@@ -4,9 +4,10 @@ import glob
 import argparse
 from pathlib import Path
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from src.config import Config
 from src.utils.data_manager import DataManager
-from src.data.dataset import CipherDataset
+from src.data.dataset import CipherDataset, PretokenizedCipherDataset
 from src.engine.solver import CipherSolver
 from src.utils.logging import get_logger
 logger = get_logger("eval.py")
@@ -45,27 +46,57 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     solver = CipherSolver(config)
     solver.load_checkpoint(model_path)
 
-    test_files = DataManager.scan_directory(test_dir)
-    test_dataset = CipherDataset(
-        test_files,
-        max_seq_len=config.max_len,
-        tokenizer=solver.tokenizer,
-        mode="eval",
-    )
+    test_dir = Path(test_dir).resolve()
+    is_arrow = (test_dir / "dataset_info.json").exists() or any(test_dir.glob("*.arrow"))
+
+    if is_arrow:
+        logger.info(f"Arrow format detected at {test_dir}. Using PretokenizedCipherDataset.")
+        test_dataset = PretokenizedCipherDataset(test_dir, max_seq_len=config.max_len)
+    else:
+        logger.info(f"Legacy format detected. Scanning directory...")
+        test_files = DataManager.scan_directory(test_dir)
+        test_dataset = CipherDataset(
+            test_files,
+            max_seq_len=config.max_len,
+            tokenizer=solver.tokenizer,
+            mode="eval",
+        )
+
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     results = {"model_path": str(model_path), "predictions": []}
-
     logger.info(f"Testing {len(test_dataset)} files with solver...")
 
-    for cipher_tensor, ground_truth, metadata in test_loader:
-        raw_cipher = cipher_tensor.squeeze(0).tolist()
+    for batch in tqdm(test_loader, desc="Decrypting"):
+        if isinstance(batch, dict):
+            input_ids = batch["input_ids"].squeeze(0).tolist()
+            label_ids = batch["labels"].squeeze(0).tolist()
 
-        current_ground_truth = ground_truth[0]
-        current_path = metadata["path"][0]
-        current_internal = metadata["internal_name"][0] or ""
-        base = os.path.basename(current_path)
-        filename = f"{base}/{current_internal}" if current_internal else base
+            label_ids = [tid for tid in label_ids if tid != -100]
+            current_ground_truth = solver.tokenizer.decode(label_ids)
+
+            sep_id = solver.tokenizer.sep_token_id
+            if sep_id in input_ids:
+                sep_idx = input_ids.index(sep_id)
+                raw_cipher = input_ids[:sep_idx + 1] 
+            else:
+                raw_cipher = input_ids
+
+            if "id" in batch:
+                filename = f"arrow_{batch['id'][0]}"
+            elif "filename" in batch:
+                filename = batch["filename"][0]
+            else:
+                filename = f"sample_{i:06d}"
+        else:
+            cipher_tensor, ground_truth, metadata = batch
+            raw_cipher = cipher_tensor.squeeze(0).tolist()
+            current_ground_truth = ground_truth[0]
+            
+            current_path = metadata["path"][0]
+            current_internal = metadata.get("internal_name", [""])[0]
+            base = os.path.basename(current_path)
+            filename = f"{base}/{current_internal}" if current_internal else base
 
         deciphered_text = solver.decrypt(raw_cipher)
         symbol_err_rate = solver.calculate_ser(deciphered_text, current_ground_truth)

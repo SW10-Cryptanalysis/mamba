@@ -25,11 +25,18 @@ class CipherTokenizer:
         """
         self.config = config
         self.pad_token_id = 0
-        self.sep_token = config.unique_homophones + 1
-        self.char_offset = self.sep_token + 1
+        self.sep_token_id = config.unique_homophones + 1
+        self.eos_token_id = config.unique_homophones + 4
+        self.char_offset = self.sep_token_id + 1
 
-        self.char_to_id = {chr(i + 97): i for i in range(26)}
-        self.id_to_char = {i + self.char_offset: chr(i + 97) for i in range(26)}
+        self.char_to_id = {
+            chr(i + 97): i + self.char_offset 
+            for i in range(26)
+        }
+        self.id_to_char = {
+            i + self.char_offset: chr(i + 97) 
+            for i in range(26)
+        }
 
     def pad_sequence(self, ids: list[int], max_len: int) -> torch.Tensor:
         """Handle truncation and padding, returning a LongTensor.
@@ -59,24 +66,36 @@ class CipherTokenizer:
 
         """
         return [
-            self.char_to_id[c] + self.char_offset
-            for c in text.lower()
+            self.char_to_id[c] 
+            for c in text.lower() 
             if c in self.char_to_id
         ]
 
     def decode(self, ids: list[int] | torch.Tensor) -> str:
-        """Convert IDs back to string, ignoring PAD and SEP tokens.
+        """Convert token IDs back to a string, filtering out special control tokens.
 
         Args:
-            ids: List of IDs or a torch.Tensor to decode.
+            ids: A list of integer IDs or a torch.Tensor to be decoded. 
+                Handles both 1D and multi-dimensional tensors by flattening.
 
         Returns:
-            The decoded plaintext string.
-
+            str: The decoded string containing only mapped characters, 
+                excluding PAD, SEP, and EOS tokens.
         """
         if isinstance(ids, torch.Tensor):
             ids = ids.view(-1).tolist()
-        return "".join([self.id_to_char[i] for i in ids if i in self.id_to_char])
+
+        special_tokens = {
+            self.pad_token_id, 
+            self.sep_token_id, 
+            self.eos_token_id
+        }
+
+        return "".join([
+            self.id_to_char[i] 
+            for i in ids 
+            if i in self.id_to_char and i not in special_tokens
+        ])
 
     @property
     def vocab_size(self) -> int:

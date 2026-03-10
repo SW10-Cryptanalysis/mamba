@@ -56,9 +56,15 @@ class Config:
 	train_data_dir: Path = data_dir / "Training"
 	valid_data_dir: Path = data_dir / "Validation"
 	test_data_dir: Path = data_dir / "Test"
+	tok_train_data_nosp: Path = data_dir / "training_data.txt"
+	tok_valid_data_nosp: Path = data_dir / "validation_data.txt"
+	tok_test_data_nosp: Path = data_dir / "test_data.txt"
+	tok_train_data_wisp: Path = data_dir / "training_data_spaces.txt"
+	tok_valid_data_wisp: Path = data_dir / "validation_data_spaces.txt"
+	tok_test_data_wisp: Path = data_dir / "test_data_spaces.txt"
 	homophone_file: str = "metadata.json"
 
 	plain_vocab_size: int = 26
-	unique_homophones: int = 3000
+	unique_homophones: int = 2494
 	max_len: int = 12_000
 	buffer: int = 1

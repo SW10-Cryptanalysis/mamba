@@ -15,7 +15,7 @@ def tokenizer():
 def test_initialization_offsets(tokenizer):
     """Verify that tokens don't overlap."""
     assert tokenizer.pad_token_id == 0
-    assert tokenizer.sep_token == 101
+    assert tokenizer.sep_token_id == 101
     assert tokenizer.char_offset == 102
     # First char 'a' should be at 102
     assert 102 in tokenizer.id_to_char

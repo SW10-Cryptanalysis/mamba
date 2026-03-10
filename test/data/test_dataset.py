@@ -23,45 +23,42 @@ def test_dataset_length(sample_file_paths, tokenizer):
 
 @patch("src.utils.data_manager.DataManager.load_sample")
 def test_dataset_train_mode(mock_load, sample_file_paths, tokenizer):
-    """Verify that train mode returns (cipher_tensor, plain_tensor)."""
+    """Verify train mode returns unpadded dict (collate_fn handles padding later)."""
     mock_load.return_value = {
         "ciphertext": "1 2 3",
         "plaintext": "abc"
     }
 
-    max_len = 5
-    dataset = CipherDataset(sample_file_paths, max_seq_len=max_len, tokenizer=tokenizer, mode="train")
-    cipher, plain = dataset[0]
+    dataset = CipherDataset(sample_file_paths, max_seq_len=10, tokenizer=tokenizer, mode="train")
+    
+    batch = dataset[0]
+    input_ids = batch["input_ids"]
+    labels = batch["labels"]
 
-    assert torch.is_tensor(cipher)
-    assert cipher.shape[0] == max_len
-    assert cipher.tolist() == [1, 2, 3, 0, 0]
+    expected_content_len = 7
+    
+    assert input_ids.shape[0] == expected_content_len
+    assert labels.shape[0] == expected_content_len
 
-    assert torch.is_tensor(plain)
-    assert plain.shape[0] == max_len
-
-    expected_ids = tokenizer.encode("abc")
-    expected_padded = (expected_ids + [0] * max_len)[:max_len]
-
-    assert plain.tolist() == expected_padded
+    assert input_ids.tolist() == [1, 2, 3, tokenizer.sep_token_id] + tokenizer.encode("abc")
+    assert labels.tolist() == [-100, -100, -100, -100] + tokenizer.encode("abc")
 
 @patch("src.utils.data_manager.DataManager.load_sample")
 def test_dataset_eval_mode_robust(mock_load, sample_file_paths, tokenizer):
-    """Verify eval mode returns correct types, handles None, and pads correctly."""
+    """Verify eval mode returns Cipher + SEP without internal padding."""
     mock_load.return_value = {
         "ciphertext": [10, 20],
         "plaintext": "hello"
     }
 
-    max_len = 4
+    max_len = 10
     dataset = CipherDataset(sample_file_paths, max_seq_len=max_len, tokenizer=tokenizer, mode="eval")
     cipher_tensor, plain_str, metadata = dataset[0]
 
-    assert cipher_tensor.shape[0] == max_len
-    assert cipher_tensor.tolist() == [10, 20, 0, 0]
+    assert torch.is_tensor(cipher_tensor)
+    assert isinstance(plain_str, str)
+    assert isinstance(metadata, dict)
 
+    assert cipher_tensor.shape[0] == 3
+    assert cipher_tensor[-1].item() == tokenizer.sep_token_id
     assert plain_str == "hello"
-
-    assert metadata["internal_name"] == ""
-    assert isinstance(metadata["path"], str)
-    assert metadata["path"] == sample_file_paths[0][0]

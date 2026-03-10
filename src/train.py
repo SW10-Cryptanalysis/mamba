@@ -1,23 +1,20 @@
 import json
-from torch.utils.data import DataLoader
 import os
 import argparse
+from pathlib import Path
+from functools import partial
+from torch.utils.data import DataLoader
 from src.models.mamba import MambaModel
 from src.utils.logging import get_logger
-from pathlib import Path
 from src.config import Config
 from src.utils.data_manager import DataManager
-from src.data.dataset import CipherDataset
+from src.data.dataset import CipherDataset, PretokenizedCipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
 
-
 logger = get_logger("train.py")
 
-def resolve_config(
-    resume_arg: str | None,
-    config: Config,
-) -> tuple[Path | None, Path | None]:
+def resolve_config(resume_arg: str | None, config: Config) -> tuple[Path | None, Path | None]:
     """Handle checkpoint auto-detection and sync config from existing experiments."""
     save_path = Path(config.save_path)
     resume_path = None
@@ -47,40 +44,44 @@ def resolve_config(
 
     return resume_path, target_exp_dir
 
-def get_loaders(
-    config: Config,
-    tokenizer: CipherTokenizer,
-) -> tuple[DataLoader, DataLoader]:
-    """Initialize training and validation data loaders."""
-    train_files = DataManager.scan_directory(os.path.abspath(config.train_data_dir))
-    valid_files = DataManager.scan_directory(os.path.abspath(config.valid_data_dir))
+def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader, DataLoader]:
+    """Initialize training and validation data loaders with format detection."""
+    
+    train_path = Path(config.train_data_dir).resolve()
+    valid_path = Path(config.valid_data_dir).resolve()
 
-    if not (
-        isinstance(config.unique_homophones, int) and isinstance(config.max_len, int)
-    ):
-        max_len, _ = DataManager.get_max_stats(train_files)
+    is_arrow = (train_path / "dataset_info.json").exists() or any(train_path.glob("*.arrow"))
+
+    if is_arrow:
+        logger.info(f"Arrow format detected. Using PretokenizedCipherDataset.")
+        train_ds = PretokenizedCipherDataset(train_path, max_seq_len=config.max_len)
+        val_ds = PretokenizedCipherDataset(valid_path, max_seq_len=config.max_len)
     else:
-        max_len = config.max_len
+        logger.info(f"Legacy format detected. Scanning directory for JSON/ZIPs...")
+        train_files = DataManager.scan_directory(train_path)
+        valid_files = DataManager.scan_directory(valid_path)
+        
+        train_ds = CipherDataset(train_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
+        val_ds = CipherDataset(valid_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
+
+    collate_fn = partial(
+        DataManager.safe_pad_collate, 
+        pad_token_id=tokenizer.pad_token_id,
+        ignore_index=-100
+    )
 
     num_workers = max(1, (os.cpu_count() or 1) - 4)
-
     loader_args = {
         "batch_size": config.batch_size,
         "num_workers": num_workers,
         "pin_memory": True,
-        "persistent_workers": True,
+        "persistent_workers": True if num_workers > 0 else False,
+        "collate_fn": collate_fn,
     }
 
-    train_loader = DataLoader(
-        CipherDataset(train_files, max_seq_len=max_len, tokenizer=tokenizer),
-        shuffle=True,
-        **loader_args,
-    )
-    val_loader = DataLoader(
-        CipherDataset(valid_files, max_seq_len=max_len, tokenizer=tokenizer),
-        shuffle=False,
-        **loader_args,
-    )
+    train_loader = DataLoader(train_ds, shuffle=True, **loader_args)
+    val_loader = DataLoader(val_ds, shuffle=False, **loader_args)
+
     return train_loader, val_loader
 
 def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
@@ -104,6 +105,7 @@ def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
         config=config,
         save_path=Path(config.save_path),
         exp_dir=target_exp_dir,
+        device=device
     )
 
     if resume_path:

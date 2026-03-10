@@ -2,6 +2,7 @@ import os
 import json
 import zipfile
 from pathlib import Path
+import torch
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 from src.utils.logging import get_logger
@@ -161,3 +162,31 @@ class DataManager:
         if not checkpoints:
             return None
         return max(checkpoints, key=lambda p: p.stat().st_mtime)
+
+    
+    @staticmethod
+    def safe_pad_collate(batch, pad_token_id=0, ignore_index=-100):
+        """
+        Args:
+            batch: A list of dicts from the Dataset 
+                   [{"input_ids": t1, "labels": t2}, ...]
+        """
+        # 1. Extract sequences from the list of dictionaries
+        input_ids = [item["input_ids"] for item in batch]
+        labels = [item["labels"] for item in batch]
+
+        # 2. Perform padding
+        # (Assuming you are using torch.nn.utils.rnn.pad_sequence)
+        padded_input_ids = torch.nn.utils.rnn.pad_sequence(
+            input_ids, batch_first=True, padding_value=pad_token_id
+        )
+        
+        padded_labels = torch.nn.utils.rnn.pad_sequence(
+            labels, batch_first=True, padding_value=ignore_index
+        )
+
+        # 3. RETURN A DICTIONARY (This is the fix!)
+        return {
+            "input_ids": padded_input_ids,
+            "labels": padded_labels
+        }
