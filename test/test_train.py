@@ -21,7 +21,7 @@ def test_resolve_config_manual_path(mock_exp_dir):
     config = Config()
     config.learning_rate = 0.001 # Default
 
-    resume_path, target_dir = resolve_config(str(mock_exp_dir), config)
+    resume_path, target_dir = resolve_config(str(mock_exp_dir), config, "normal")
 
     assert resume_path == mock_exp_dir
     assert target_dir == mock_exp_dir.parent
@@ -35,7 +35,7 @@ def test_resolve_config_auto(mock_get_latest, mock_exp_dir):
     mock_get_latest.return_value = mock_exp_dir
     config = Config()
 
-    resume_path, _ = resolve_config("auto", config)
+    resume_path, _ = resolve_config("auto", config, "normal")
 
     mock_get_latest.assert_called_once()
     assert resume_path == mock_exp_dir

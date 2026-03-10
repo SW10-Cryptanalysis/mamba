@@ -41,6 +41,7 @@ class MambaTrainer:
         val_loader: DataLoader,
         config: Config,
         save_path: Path,
+        run_type: str = "normal",
         exp_dir: Path = None,
         device: str = "cuda",
     ) -> None:
@@ -62,6 +63,7 @@ class MambaTrainer:
         self.val_loader = val_loader
         self.config = config
         self.save_path = save_path
+        self.run_type = run_type
         self.device = device
 
         if exp_dir:
@@ -69,7 +71,7 @@ class MambaTrainer:
             self.timestamp = exp_dir.name.replace("exp_", "")
         else:
             self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
-            self.exp_dir = save_path / f"exp_{self.timestamp}"
+            self.exp_dir = self.save_path / f"exp_{self.run_type}_{self.timestamp}"
             self.exp_dir.mkdir(parents=True, exist_ok=True)
             self._save_config()
 

@@ -51,7 +51,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
     if is_arrow:
         logger.info(f"Arrow format detected at {test_dir}. Using PretokenizedCipherDataset.")
-        test_dataset = PretokenizedCipherDataset(test_dir, max_seq_len=config.max_len)
+        test_dataset = PretokenizedCipherDataset(test_dir, max_seq_len=config.max_len, config=config)
     else:
         logger.info(f"Legacy format detected. Scanning directory...")
         test_files = DataManager.scan_directory(test_dir)
@@ -117,21 +117,19 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Mamba Cipher Model")
-    parser.add_argument(
-        "model_path",
-        nargs="?",
-        default=None,
-        help="Path to specific .pth file",
-    )
+    parser.add_argument("model_path", nargs="?", default=None, help="Path to specific .pth file")
+    parser.add_argument("--spaces", action="store_true", help="Evaluate using the spaced model/dataset")
     args = parser.parse_args()
 
     config = Config()
+    run_type = "spaced" if args.spaces else "normal"
+    search_prefix = f"exp_{run_type}_*"
 
     model_path = None
     if args.model_path:
         model_path = Path(args.model_path)
     else:
-        latest_checkpoint = DataManager.get_latest_checkpoint(config.save_path)
+        latest_checkpoint = DataManager.get_latest_checkpoint(config.save_path, prefix=search_prefix)
         if latest_checkpoint:
             model_path = latest_checkpoint
             logger.info(f"Auto-detected latest model: {model_path}")
@@ -149,5 +147,6 @@ if __name__ == "__main__":
             for k, v in saved_dict.items():
                 if hasattr(config, k):
                     setattr(config, k, v)
-
-    test_model(Path(config.test_data_dir), model_path=model_path)
+    
+    test_dir = config.tok_test_spaced if args.spaces else config.tok_test_normal
+    test_model(test_dir=test_dir, model_path=model_path)

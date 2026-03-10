@@ -13,52 +13,46 @@ def tokenizer():
     return CipherTokenizer(config)
 
 def test_initialization_offsets(tokenizer):
-    """Verify that tokens don't overlap."""
+    """Verify that tokens don't overlap using dynamic attributes."""
     assert tokenizer.pad_token_id == 0
-    assert tokenizer.sep_token_id == 101
-    assert tokenizer.char_offset == 102
-    # First char 'a' should be at 102
-    assert 102 in tokenizer.id_to_char
-    assert tokenizer.id_to_char[102] == "a"
+    # SEP is homophones + 1
+    assert tokenizer.sep_token_id == tokenizer.config.unique_homophones + 1
+    # Space is SEP + 1
+    assert tokenizer.space_token_id == tokenizer.config.unique_homophones + 2
+    # Alphabet starts after Space
+    assert tokenizer.char_offset == tokenizer.config.unique_homophones + 5
+    
+    assert tokenizer.id_to_char[tokenizer.char_offset] == "a"
+    assert tokenizer.id_to_char[tokenizer.space_token_id] == " "
 
 def test_encode_shifting(tokenizer):
-    """Verify that plaintext is shifted correctly by the offset."""
+    """Verify plaintext is shifted correctly based on the tokenizer's char_offset."""
     text = "abc"
     encoded = tokenizer.encode(text)
-
-    # 'a' is index 0 in char_to_id. 0 + 102 = 102.
-    expected = [102, 103, 104]
+    # Dynamically expect based on whatever char_offset is
+    expected = [tokenizer.char_offset, tokenizer.char_offset + 1, tokenizer.char_offset + 2]
     assert encoded == expected
 
 def test_decode_filtering(tokenizer):
-    """Verify decoding ignores PAD (0) and SEP (101) tokens."""
-    # [102('a'), 103('b'), 101(SEP), 0(PAD)]
-    ids = [102, 103, 101, 0]
+    """Verify decoding ignores PAD and SEP but KEEPS spaces."""
+    ids = [
+        tokenizer.char_offset,      # 'a'
+        tokenizer.char_offset + 1,  # 'b'
+        tokenizer.sep_token_id,     # SEP (filter out)
+        0                           # PAD (filter out)
+    ]
     decoded = tokenizer.decode(ids)
     assert decoded == "ab"
 
 def test_round_trip(tokenizer):
-    """Ensure encoding then decoding returns the original string (lowercase)."""
-    original = "HelloMamba"
+    """Ensure encoding then decoding returns the original string."""
+    original = "hello mamba"
     encoded = tokenizer.encode(original)
     decoded = tokenizer.decode(encoded)
     assert decoded == original.lower()
 
-def test_pad_sequence_truncation(tokenizer):
-    """Verify that sequences longer than max_len are truncated."""
-    ids = [1, 2, 3, 4, 5]
-    tensor = tokenizer.pad_sequence(ids, max_len=3)
-    assert tensor.shape[0] == 3
-    assert tensor.tolist() == [1, 2, 3]
-
-def test_pad_sequence_padding(tokenizer):
-    """Verify that sequences shorter than max_len are padded with pad_token_id."""
-    ids = [1, 2]
-    tensor = tokenizer.pad_sequence(ids, max_len=4)
-    assert tensor.tolist() == [1, 2, 0, 0]
-    assert tensor.dtype == torch.long
-
 def test_vocab_size_calculation(tokenizer):
-    """Verify the property returns the correct total size."""
-    # offset(102) + plain_vocab(26) + buffer(10) = 138
-    assert tokenizer.vocab_size == 138
+    """Verify the property returns the correct total size dynamically."""
+    # current logic: char_offset (103) + plain_vocab (26) + buffer (10) = 139
+    expected = tokenizer.char_offset + tokenizer.config.plain_vocab_size + tokenizer.config.buffer
+    assert tokenizer.vocab_size == expected

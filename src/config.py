@@ -56,12 +56,12 @@ class Config:
 	train_data_dir: Path = data_dir / "Training"
 	valid_data_dir: Path = data_dir / "Validation"
 	test_data_dir: Path = data_dir / "Test"
-	tok_train_data_nosp: Path = data_dir / "training_data.txt"
-	tok_valid_data_nosp: Path = data_dir / "validation_data.txt"
-	tok_test_data_nosp: Path = data_dir / "test_data.txt"
-	tok_train_data_wisp: Path = data_dir / "training_data_spaces.txt"
-	tok_valid_data_wisp: Path = data_dir / "validation_data_spaces.txt"
-	tok_test_data_wisp: Path = data_dir / "test_data_spaces.txt"
+	tok_train_normal: Path = data_dir / "tokenized_normal" / "Training"
+	tok_valid_normal: Path = data_dir / "tokenized_normal" / "Validation"
+	tok_test_normal: Path = data_dir / "tokenized_normal" / "Test"
+	tok_train_spaced: Path = data_dir / "tokenized_spaced" / "Training"
+	tok_valid_spaced: Path = data_dir / "tokenized_spaced" / "Validation"
+	tok_test_spaced: Path = data_dir / "tokenized_spaced" / "Test"
 	homophone_file: str = "metadata.json"
 
 	plain_vocab_size: int = 26

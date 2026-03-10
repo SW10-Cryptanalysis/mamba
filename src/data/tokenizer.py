@@ -16,31 +16,23 @@ class CipherTokenizer:
 
     """
 
-    def __init__(self, config: Config) -> None:
-        """Initialize tokenizer with vocabulary offsets.
-
-        Args:
-            config: Configuration object containing vocabulary sizes and offsets.
-
-        """
+    def __init__(self, config: Config):
         self.config = config
         self.pad_token_id = 0
+
         self.sep_token_id = config.unique_homophones + 1
         self.space_token_id = config.unique_homophones + 2
-        self.eos_token_id = config.unique_homophones + 4
-        self.char_offset = self.sep_token_id + 1
+        self.eos_token_id = self.config.unique_homophones + 4
+        self.char_offset = config.unique_homophones + 5
 
-        self.char_to_id = {
-            chr(i + 97): i + self.char_offset 
-            for i in range(26)
-        }
-        self.id_to_char = {
-            i + self.char_offset: chr(i + 97) 
-            for i in range(26)
-        }
-
-        self.char_to_id[" "] = self.space_token_id
-        self.id_to_char[self.space_token_id] = " "
+        self.char_to_id = {" ": self.space_token_id}
+        self.id_to_char = {self.space_token_id: " "}
+        
+        for i in range(26):
+            char = chr(ord('a') + i)
+            token_id = self.char_offset + i
+            self.char_to_id[char] = token_id
+            self.id_to_char[token_id] = char
 
     def pad_sequence(self, ids: list[int], max_len: int) -> torch.Tensor:
         """Handle truncation and padding, returning a LongTensor.
@@ -91,7 +83,7 @@ class CipherTokenizer:
 
         special_tokens = {
             self.pad_token_id, 
-            self.sep_token_id, 
+            self.sep_token_id,
             self.eos_token_id
         }
 

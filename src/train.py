@@ -14,14 +14,15 @@ from src.engine.trainer import MambaTrainer
 
 logger = get_logger("train.py")
 
-def resolve_config(resume_arg: str | None, config: Config) -> tuple[Path | None, Path | None]:
+def resolve_config(resume_arg: str | None, config: Config, run_type: str) -> tuple[Path | None, Path | None]:
     """Handle checkpoint auto-detection and sync config from existing experiments."""
     save_path = Path(config.save_path)
     resume_path = None
     target_exp_dir = None
 
     if resume_arg == "auto":
-        resume_path = DataManager.get_latest_checkpoint(save_path)
+        search_prefix = f"exp_{run_type}_*"
+        resume_path = DataManager.get_latest_checkpoint(save_path, prefix=search_prefix)
     elif resume_arg:
         resume_path = Path(resume_arg)
         if not resume_path.exists():
@@ -84,10 +85,23 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
 
     return train_loader, val_loader
 
-def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
+def train_model(resume_arg: str | None = None, use_spaces: bool = False, device: str = "cuda") -> None:
     """Execute the full training pipeline."""
     config = Config()
-    resume_path, target_exp_dir = resolve_config(resume_arg, config)
+
+    if use_spaces:
+        logger.info("Mode: Training WITH spaces.")
+        config.train_data_dir = config.tok_train_spaced
+        config.valid_data_dir = config.tok_valid_spaced
+        config.test_data_dir = config.tok_test_spaced
+    else:
+        logger.info("Mode: Training WITHOUT spaces (Normal).")
+        config.train_data_dir = config.tok_train_normal
+        config.valid_data_dir = config.tok_valid_normal
+        config.test_data_dir = config.tok_test_normal
+
+    run_type = "spaced" if use_spaces else "normal"
+    resume_path, target_exp_dir = resolve_config(resume_arg, config, run_type)
 
     tokenizer = CipherTokenizer(config)
     train_loader, val_loader = get_loaders(config, tokenizer)
@@ -104,6 +118,7 @@ def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
         val_loader=val_loader,
         config=config,
         save_path=Path(config.save_path),
+        run_type=run_type,
         exp_dir=target_exp_dir,
         device=device
     )
@@ -116,6 +131,7 @@ def train_model(resume_arg: str | None = None, device: str = "cuda") -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", nargs="?", const="auto", default=None)
+    parser.add_argument("--spaces", action="store_true", help="Train on the dataset containing spaces.")
     args = parser.parse_args()
 
-    train_model(resume_arg=args.resume)
+    train_model(resume_arg=args.resume, use_spaces=args.spaces)
