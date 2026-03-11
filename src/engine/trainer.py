@@ -103,14 +103,13 @@ class MambaTrainer:
             json.dump(self.history, f, indent=4)
         logger.info(f"History updated at {history_path}")
 
-    def _save_checkpoint(self, val_loss: float, is_best: bool) -> None:
-        """Save a model checkpoint and update the 'latest' and 'best' files.
-
+    def _save_checkpoint(self, val_loss: float, is_best: bool, suffix: str = None) -> None:
+        """Save a model checkpoint.
+        
         Args:
-            val_loss: The validation loss achieved in the current epoch.
-            is_best: A flag indicating if this model achieved the lowest
-                validation loss seen so far.
-
+            val_loss: Current loss.
+            is_best: If true, copies to best.pth.
+            suffix: Optional string (e.g., 'step_5000') for intra-epoch saves.
         """
         state = {
             "epoch": self.current_epoch,
@@ -123,14 +122,18 @@ class MambaTrainer:
             "n_layers": self.config.n_layers,
         }
 
-        epoch_filename = f"epoch_{self.current_epoch:03d}.pth"
+        base_name = f"epoch_{self.current_epoch:03d}"
+        if suffix:
+            base_name += f"_{suffix}"
+        
+        epoch_filename = f"{base_name}.pth"
         epoch_path = self.exp_dir / epoch_filename
         torch.save(state, epoch_path)
 
         latest_path = self.exp_dir / "latest.pth"
         shutil.copyfile(epoch_path, latest_path)
 
-        if is_best:
+        if is_best and not suffix:
             best_path = self.exp_dir / "best.pth"
             shutil.copyfile(epoch_path, best_path)
             logger.info(
@@ -208,13 +211,16 @@ class MambaTrainer:
     def _train_one_epoch(self) -> float:
         self.model.train()
         total_loss = 0
+
+        save_every_steps = self.config.save_step 
+        
         loop = tqdm(
             self.train_loader,
             desc=f"Epoch {self.current_epoch} [Train]",
             leave=False,
         )
 
-        for batch in loop:
+        for i, batch in enumerate(loop):
             self.optimizer.zero_grad()
 
             with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -224,7 +230,24 @@ class MambaTrainer:
             self.optimizer.step()
 
             total_loss += loss.item()
-            loop.set_postfix(loss=loss.item())
+            current_step_loss = loss.item()
+            loop.set_postfix(loss=current_step_loss)
+
+            step = i + 1
+            if step % save_every_steps == 0:
+                prev_step = step - save_every_steps
+                if prev_step > 0:
+                    prev_checkpoint = self.exp_dir / f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
+                    if prev_checkpoint.exists():
+                        prev_checkpoint.unlink()
+                        logger.info(f"Cleaned up intermediate checkpoint: {prev_checkpoint.name}")
+
+                logger.info(f"\nStep {step}: Saving intermediate checkpoint...")
+                self._save_checkpoint(
+                    val_loss=current_step_loss, 
+                    is_best=False, 
+                    suffix=f"step_{step}"
+                )
 
         return total_loss / len(self.train_loader)
 

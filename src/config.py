@@ -38,17 +38,18 @@ class Config:
 
 	"""
 
-	d_model: int = 64
-	n_layers: int = 1
-	d_state: int = 16
+	d_model: int = 256
+	n_layers: int = 6
+	d_state: int = 32
 	d_conv: int = 4
-	expand: int = 1
+	expand: int = 2
 
-	batch_size: int = 16
+	batch_size: int = 8
 	learning_rate: float = 5e-4
-	epochs: int = 5
+	epochs: int = 10
+	save_step: int = 5000
 
-	patience: int = 1
+	patience: int = 2
 	factor: float = 0.5
 
 	save_path: Path = Path(__file__).parent.parent / "outputs"
@@ -66,5 +67,5 @@ class Config:
 
 	plain_vocab_size: int = 26
 	unique_homophones: int = 2494
-	max_len: int = 12_000
-	buffer: int = 10
+	max_len: int = 20000
+	buffer: int = 50
