@@ -112,10 +112,6 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
         config=config,
     ).to(device)
 
-    if hasattr(torch, "compile"):
-        logger.info("Compiling model for performance...")
-        model = torch.compile(model)
-
     trainer = MambaTrainer(
         model=model,
         train_loader=train_loader,
