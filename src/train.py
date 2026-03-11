@@ -113,13 +113,8 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
     ).to(device)
 
     if hasattr(torch, "compile"):
-        logger.info("Compiling model (Optimized for Mamba/Triton compatibility)...")
-        model = torch.compile(
-            model, 
-            mode="reduce-overhead",
-            fullgraph=False,
-            dynamic=False
-        )
+        logger.info("Compiling model for performance...")
+        model = torch.compile(model)
 
     trainer = MambaTrainer(
         model=model,
