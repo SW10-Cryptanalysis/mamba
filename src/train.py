@@ -113,8 +113,12 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
     ).to(device)
 
     if hasattr(torch, "compile"):
-        logger.info("Compiling model for performance...")
-        model = torch.compile(model)
+        logger.info("Compiling model with dynamic shapes for L4 performance...")
+        model = torch.compile(
+            model, 
+            mode="reduce-overhead", 
+            dynamic=True
+        )
 
     trainer = MambaTrainer(
         model=model,
