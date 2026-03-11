@@ -206,36 +206,37 @@ class MambaTrainer:
                 break
 
     def _train_one_epoch(self) -> float:
-            self.model.train()
-            total_loss = 0
-            loop = tqdm(
-                self.train_loader,
-                desc=f"Epoch {self.current_epoch} [Train]",
-                leave=False,
-            )
+        self.model.train()
+        total_loss = 0
+        loop = tqdm(
+            self.train_loader,
+            desc=f"Epoch {self.current_epoch} [Train]",
+            leave=False,
+        )
 
-            for batch in loop:
-                self.optimizer.zero_grad()
+        for batch in loop:
+            self.optimizer.zero_grad()
 
+            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
                 loss = self._compute_batch_loss(batch)
 
-                loss.backward()
-                self.optimizer.step()
+            loss.backward()
+            self.optimizer.step()
 
-                total_loss += loss.item()
-                loop.set_postfix(loss=loss.item())
+            total_loss += loss.item()
+            loop.set_postfix(loss=loss.item())
 
-            return total_loss / len(self.train_loader)
+        return total_loss / len(self.train_loader)
 
     def _validate_one_epoch(self) -> float:
         self.model.eval()
         total_loss = 0
-
         loop = tqdm(self.val_loader, desc=f"Epoch {self.current_epoch} [Val]", leave=False)
 
         with torch.no_grad():
             for batch in loop:
-                loss = self._compute_batch_loss(batch)
+                with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    loss = self._compute_batch_loss(batch)
                 total_loss += loss.item()
                 loop.set_postfix(loss=loss.item())
 

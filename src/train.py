@@ -3,6 +3,7 @@ import os
 import argparse
 from pathlib import Path
 from functools import partial
+import torch
 from torch.utils.data import DataLoader
 from src.models.mamba import MambaModel
 from src.utils.logging import get_logger
@@ -110,6 +111,10 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
         char_offset=tokenizer.char_offset,
         config=config,
     ).to(device)
+
+    if hasattr(torch, "compile"):
+        logger.info("Compiling model for performance...")
+        model = torch.compile(model)
 
     trainer = MambaTrainer(
         model=model,

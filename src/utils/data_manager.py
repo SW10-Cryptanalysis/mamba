@@ -171,23 +171,28 @@ class DataManager:
 		"""Args:
 		batch: A list of dicts from the Dataset 
 			   [{"input_ids": t1, "labels": t2}, ...]
-
 		"""
-		# 1. Extract sequences from the list of dictionaries
-		input_ids = [item["input_ids"] for item in batch]
-		labels = [item["labels"] for item in batch]
+		input_ids = [torch.as_tensor(item["input_ids"]) for item in batch]
+		labels = [torch.as_tensor(item["labels"]) for item in batch]
 
-		# 2. Perform padding
-		# (Assuming you are using torch.nn.utils.rnn.pad_sequence)
 		padded_input_ids = torch.nn.utils.rnn.pad_sequence(
-			input_ids, batch_first=True, padding_value=pad_token_id,
+			input_ids, batch_first=True, padding_value=pad_token_id
 		)
 
 		padded_labels = torch.nn.utils.rnn.pad_sequence(
-			labels, batch_first=True, padding_value=ignore_index,
+			labels, batch_first=True, padding_value=ignore_index
 		)
 
-		# 3. RETURN A DICTIONARY (This is the fix!)
+		curr_len = padded_input_ids.shape[1]
+		if curr_len % 8 != 0:
+			pad_amt = 8 - (curr_len % 8)
+			padded_input_ids = torch.nn.functional.pad(
+				padded_input_ids, (0, pad_amt), value=pad_token_id
+			)
+			padded_labels = torch.nn.functional.pad(
+				padded_labels, (0, pad_amt), value=ignore_index
+			)
+
 		return {
 			"input_ids": padded_input_ids,
 			"labels": padded_labels,
