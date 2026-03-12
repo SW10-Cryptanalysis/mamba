@@ -65,6 +65,7 @@ class MambaTrainer:
         self.save_path = save_path
         self.run_type = run_type
         self.device = device
+        self.resume_step = 0
 
         if exp_dir:
             self.exp_dir = exp_dir
