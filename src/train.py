@@ -3,7 +3,6 @@ import os
 import argparse
 from pathlib import Path
 from functools import partial
-import torch
 from torch.utils.data import DataLoader
 from src.models.mamba import MambaModel
 from src.utils.logging import get_logger
@@ -81,7 +80,7 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
     }
 
     train_loader = DataLoader(train_ds, shuffle=True, **loader_args)
-    
+
     # Set num_workers to 0 to avoid clash with training workers
     val_loader_args = loader_args.copy()
     val_loader_args["num_workers"] = 0

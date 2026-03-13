@@ -183,6 +183,8 @@ class MambaTrainer:
         for epoch in range(start_epoch, epochs):
             if self.resume_step == 0:
                 self.current_epoch = epoch + 1
+            else:
+                self.current_epoch = epoch
 
             avg_train_loss = self._train_one_epoch()
             avg_val_loss = self._validate_one_epoch()
@@ -215,6 +217,7 @@ class MambaTrainer:
     def _train_one_epoch(self) -> float:
         self.model.train()
         total_loss = 0
+        batches_processed = 0
         resume_step = getattr(self, "resume_step", 0)
 
         save_every_steps = self.config.save_step 
@@ -239,6 +242,7 @@ class MambaTrainer:
             self.optimizer.step()
 
             total_loss += loss.item()
+            batches_processed += 1
             current_step_loss = loss.item()
             loop.set_postfix(loss=current_step_loss)
 
@@ -259,7 +263,7 @@ class MambaTrainer:
                 )
 
         self.resume_step = 0
-        return total_loss / len(self.train_loader)
+        return total_loss / max(1, batches_processed)
 
     def _validate_one_epoch(self) -> float:
         self.model.eval()
