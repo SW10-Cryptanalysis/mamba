@@ -65,6 +65,7 @@ class MambaTrainer:
         self.save_path = save_path
         self.run_type = run_type
         self.device = device
+        self.resume_step = 0
 
         if exp_dir:
             self.exp_dir = exp_dir
@@ -113,6 +114,7 @@ class MambaTrainer:
         """
         state = {
             "epoch": self.current_epoch,
+            "step": getattr(self, "current_step", 0),
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
@@ -156,6 +158,7 @@ class MambaTrainer:
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         self.current_epoch = checkpoint["epoch"]
+        self.resume_step = checkpoint.get("step", 0)
         self.best_val_loss = checkpoint.get("val_loss", float("inf"))
 
         if "scheduler_state_dict" in checkpoint:
@@ -178,7 +181,8 @@ class MambaTrainer:
         start_epoch = self.current_epoch
 
         for epoch in range(start_epoch, epochs):
-            self.current_epoch = epoch + 1
+            if self.resume_step == 0:
+                self.current_epoch = epoch + 1
 
             avg_train_loss = self._train_one_epoch()
             avg_val_loss = self._validate_one_epoch()
@@ -211,6 +215,7 @@ class MambaTrainer:
     def _train_one_epoch(self) -> float:
         self.model.train()
         total_loss = 0
+        resume_step = getattr(self, "resume_step", 0)
 
         save_every_steps = self.config.save_step 
         
@@ -221,6 +226,10 @@ class MambaTrainer:
         )
 
         for i, batch in enumerate(loop):
+            if i < resume_step:
+                continue
+
+            self.current_step = i
             self.optimizer.zero_grad()
 
             with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
@@ -249,6 +258,7 @@ class MambaTrainer:
                     suffix=f"step_{step}"
                 )
 
+        self.resume_step = 0
         return total_loss / len(self.train_loader)
 
     def _validate_one_epoch(self) -> float:
