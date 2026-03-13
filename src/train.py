@@ -81,7 +81,13 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
     }
 
     train_loader = DataLoader(train_ds, shuffle=True, **loader_args)
-    val_loader = DataLoader(val_ds, shuffle=False, **loader_args)
+    
+    # Set num_workers to 0 to avoid clash with training workers
+    val_loader_args = loader_args.copy()
+    val_loader_args["num_workers"] = 0
+    val_loader_args["persistent_workers"] = False
+
+    val_loader = DataLoader(val_ds, shuffle=False, **val_loader_args)
 
     return train_loader, val_loader
 
