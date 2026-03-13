@@ -181,10 +181,7 @@ class MambaTrainer:
         start_epoch = self.current_epoch
 
         for epoch in range(start_epoch, epochs):
-            if self.resume_step == 0:
-                self.current_epoch = epoch + 1
-            else:
-                self.current_epoch = epoch
+            self.current_epoch = epoch
 
             avg_train_loss = self._train_one_epoch()
             avg_val_loss = self._validate_one_epoch()
@@ -208,6 +205,7 @@ class MambaTrainer:
             if is_best:
                 self.best_val_loss = avg_val_loss
 
+            self.current_epoch = epoch + 1
             self._save_checkpoint(avg_val_loss, is_best)
 
             if current_lr < 1e-7:
