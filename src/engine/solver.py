@@ -121,7 +121,7 @@ class CipherSolver:
         if max_new_tokens is None:
             max_new_tokens = input_ids.size(1) + 50
 
-        inference_params = InferenceParams(max_seqlen=2048, max_batch_size=1)
+        inference_params = InferenceParams(max_seqlen=self.config.max_len, max_batch_size=1)
 
         logits = self.model(input_ids, inference_params=inference_params)
         next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
