@@ -2,6 +2,7 @@ from typing import Any
 import torch
 from pathlib import Path
 from src.models.mamba import MambaModel
+from mamba_ssm.utils.generation import InferenceParams
 from src.data.tokenizer import CipherTokenizer
 from src.config import Config
 from src.utils.logging import get_logger
@@ -104,15 +105,6 @@ class CipherSolver:
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
-        if max_new_tokens is None:
-            current_len = input_ids.size(1) if torch.is_tensor(input_ids) else len(input_ids)
-            max_new_tokens = current_len + 50
-
-        self.model.eval()
-
-        if isinstance(input_ids, str):
-            input_ids = [int(x) for x in input_ids.split()]
-
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids], dtype=torch.long).to(self.device)
         elif input_ids.dim() == 1:
@@ -126,25 +118,28 @@ class CipherSolver:
             sep_tensor = torch.tensor([[sep_id]], device=self.device)
             input_ids = torch.cat([input_ids, sep_tensor], dim=1)
 
-        generated = input_ids
-        with torch.no_grad():
-            for _ in range(max_new_tokens):
-                logits = self.model(generated)
-                next_token_logits = logits[:, -1, :]
-                next_token = torch.argmax(next_token_logits, dim=-1).view(1, 1)
-                generated = torch.cat([generated, next_token], dim=1)
+        if max_new_tokens is None:
+            max_new_tokens = input_ids.size(1) + 50
 
-                if next_token.item() == self.tokenizer.eos_token_id:
-                    break
+        inference_params = InferenceParams(max_seqlen=2048, max_batch_size=1)
 
-        all_ids = generated.squeeze(0).tolist()
-        try:
-            sep_pos = all_ids.index(sep_id)
-            plaintext_ids = all_ids[sep_pos + 1:]
-        except ValueError:
-            plaintext_ids = all_ids
+        logits = self.model(input_ids, inference_params=inference_params)
+        next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+        
+        generated_tokens = []
+        if next_token.item() != self.tokenizer.eos_token_id:
+            generated_tokens.append(next_token.item())
 
-        return self.tokenizer.decode(plaintext_ids)
+        for _ in range(max_new_tokens - 1):
+            logits = self.model(next_token, inference_params=inference_params)
+            next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+            
+            token_id = next_token.item()
+            if token_id == self.tokenizer.eos_token_id:
+                break
+            generated_tokens.append(token_id)
+
+        return self.tokenizer.decode(generated_tokens)
 
     def calculate_ser(self, pred: str, target: str) -> float:
         """Calculate Symbol Error Rate (SER).
