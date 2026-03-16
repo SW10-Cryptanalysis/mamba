@@ -105,7 +105,8 @@ class CipherSolver:
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
         if max_new_tokens is None:
-            max_new_tokens = input_ids.size(1) + 50
+            current_len = input_ids.size(1) if torch.is_tensor(input_ids) else len(input_ids)
+            max_new_tokens = current_len + 50
 
         self.model.eval()
 
