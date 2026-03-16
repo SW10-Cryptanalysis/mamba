@@ -2,6 +2,7 @@ import os
 import json
 import glob
 import argparse
+import traceback
 from pathlib import Path
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -115,6 +116,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
             except Exception as e:
                 logger.error(f"Error processing sample {i}: {e}")
+                traceback.print_exc()
                 continue
     
     if all_ser_scores:

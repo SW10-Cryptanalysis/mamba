@@ -124,7 +124,7 @@ class CipherSolver:
         inference_params = InferenceParams(max_seqlen=self.config.max_len, max_batch_size=1)
 
         logits = self.model(input_ids, inference_params=inference_params)
-        next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+        next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
         
         generated_tokens = []
         if next_token.item() != self.tokenizer.eos_token_id:
@@ -132,7 +132,7 @@ class CipherSolver:
 
         for _ in range(max_new_tokens - 1):
             logits = self.model(next_token, inference_params=inference_params)
-            next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+            next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
             
             token_id = next_token.item()
             if token_id == self.tokenizer.eos_token_id:
