@@ -64,56 +64,76 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
 
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    results = {"model_path": str(model_path), "predictions": []}
     logger.info(f"Testing {len(test_dataset)} files with solver...")
+    output_filename = model_dir / f"eval_{model_path.stem}.jsonl"
 
-    for batch in tqdm(test_loader, desc="Decrypting"):
-        if isinstance(batch, dict):
-            input_ids = batch["input_ids"].squeeze(0).tolist()
-            label_ids = batch["labels"].squeeze(0).tolist()
+    all_ser_scores = []
+    running_ser = 0.0
+    count = 0
 
-            label_ids = [tid for tid in label_ids if tid != -100]
-            current_ground_truth = solver.tokenizer.decode(label_ids)
+    with open(output_filename, "a", encoding="utf-8") as f_out:
+        logger.info(f"Testing {len(test_dataset)} files. Results: {output_filename}")
 
-            sep_id = solver.tokenizer.sep_token_id
-            if sep_id in input_ids:
-                sep_idx = input_ids.index(sep_id)
-                raw_cipher = input_ids[:sep_idx + 1]
-            else:
-                raw_cipher = input_ids
+        for i, batch in enumerate(tqdm(test_loader, desc="Decrypting")):
+            try:
+                if isinstance(batch, dict):
+                    input_ids = batch["input_ids"].squeeze(0).tolist()
+                    label_ids = batch["labels"].squeeze(0).tolist()
 
-            if "id" in batch:
-                filename = f"arrow_{batch['id'][0]}"
-            elif "filename" in batch:
-                filename = batch["filename"][0]
-            else:
-                filename = f"sample_{i:06d}"
-        else:
-            cipher_tensor, ground_truth, metadata = batch
-            raw_cipher = cipher_tensor.squeeze(0).tolist()
-            current_ground_truth = ground_truth[0]
+                    label_ids = [tid for tid in label_ids if tid != -100]
+                    current_ground_truth = solver.tokenizer.decode(label_ids)
 
-            current_path = metadata["path"][0]
-            current_internal = metadata.get("internal_name", [""])[0]
-            base = os.path.basename(current_path)
-            filename = f"{base}/{current_internal}" if current_internal else base
+                    sep_id = solver.tokenizer.sep_token_id
+                    if sep_id in input_ids:
+                        sep_idx = input_ids.index(sep_id)
+                        raw_cipher = input_ids[:sep_idx + 1]
+                    else:
+                        logger.warning(f"Sample {i} missing SEP token. Skipping.")
+                        continue
 
-        deciphered_text = solver.decrypt(raw_cipher)
-        symbol_err_rate = solver.calculate_ser(deciphered_text, current_ground_truth)
+                    filename = batch.get("id", [f"sample_{i:06d}"])[0]
 
-        results["predictions"].append({
-            "filename": filename,
-            "ground_truth": current_ground_truth,
-            "predicted": deciphered_text,
-            "ser": symbol_err_rate,
-        })
+                deciphered_text = solver.decrypt(raw_cipher)
+                ser = solver.calculate_ser(deciphered_text, current_ground_truth)
 
-    full_model_name = model_path.stem
-    output_filename = model_dir / f"eval_{full_model_name}.json"
+                all_ser_scores.append(ser)
+                running_ser += ser
+                count += 1
 
-    with open(output_filename, "w") as f:
-        json.dump(results, f, indent=4)
-    logger.info(f"\nResults saved to {output_filename}")
+                if i % 10 == 0:
+                    tqdm.set_postfix({"avg_ser": f"{running_ser/count:.4f}"})
+
+                result_entry = {
+                    "id": str(filename),
+                    "ser": round(ser, 4),
+                    "predicted": deciphered_text,
+                    "ground_truth": current_ground_truth
+                }
+                f_out.write(json.dumps(result_entry) + "\n")
+                f_out.flush()
+
+            except Exception as e:
+                logger.error(f"Error processing sample {i}: {e}")
+                continue
+    
+    if all_ser_scores:
+        avg_ser = sum(all_ser_scores) / len(all_ser_scores)
+        summary = {
+            "model_path": str(model_path),
+            "average_ser": round(avg_ser, 4),
+            "total_samples": len(all_ser_scores),
+            "best_ser": round(min(all_ser_scores), 4),
+            "worst_ser": round(max(all_ser_scores), 4)
+        }
+        summary_path = model_dir / f"summary_{model_path.stem}.json"
+        with open(summary_path, "w") as f:
+            json.dump(summary, f, indent=4)
+        
+        logger.info(f"--- EVALUATION SUMMARY ---")
+        logger.info(f"Final Average SER: {avg_ser:.4f}")
+        logger.info(f"Results saved to: {summary_path}")
+
+    logger.info("Evaluation complete.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Mamba Cipher Model")
