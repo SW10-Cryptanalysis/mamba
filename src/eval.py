@@ -70,11 +70,12 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     all_ser_scores = []
     running_ser = 0.0
     count = 0
+    pbar = tqdm(test_loader, desc="Decrypting")
 
     with open(output_filename, "a", encoding="utf-8") as f_out:
         logger.info(f"Testing {len(test_dataset)} files. Results: {output_filename}")
 
-        for i, batch in enumerate(tqdm(test_loader, desc="Decrypting")):
+        for i, batch in enumerate(pbar):
             try:
                 if isinstance(batch, dict):
                     input_ids = batch["input_ids"].squeeze(0).tolist()
@@ -101,7 +102,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
                 count += 1
 
                 if i % 10 == 0:
-                    tqdm.set_postfix({"avg_ser": f"{running_ser/count:.4f}"})
+                    pbar.set_postfix({"avg_ser": f"{running_ser/count:.4f}"})
 
                 result_entry = {
                     "id": str(filename),
