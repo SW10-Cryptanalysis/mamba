@@ -51,6 +51,9 @@ class Config:
 
 	patience: int = 2
 	factor: float = 0.5
+	pct_start: float = 0.1
+	div_factor: int = 10
+	final_div_factor: int = 1000
 
 	save_path: Path = Path(__file__).parent.parent / "outputs"
 	data_dir = Path(__file__).parent.parent.parent / "Ciphers"

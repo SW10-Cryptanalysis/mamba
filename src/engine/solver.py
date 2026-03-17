@@ -90,8 +90,6 @@ class CipherSolver:
                 or a torch.Tensor. If a unified sequence (Cipher + SEP 
                 + Plain) is provided, tokens after the SEP are discarded before 
                 generation begins.
-            max_new_tokens: The maximum number of plaintext tokens to generate 
-                beyond the separator. Defaults to 512.
 
         Returns:
             str: The decrypted plaintext string, decoded via the tokenizer.
@@ -118,7 +116,7 @@ class CipherSolver:
             sep_tensor = torch.tensor([[sep_id]], device=self.device)
             input_ids = torch.cat([input_ids, sep_tensor], dim=1)
 
-        max_new_tokens = input_ids.size(1) - 1
+        cipher_len = input_ids.size(1) - 2
         inference_params = InferenceParams(max_seqlen=self.config.max_len, max_batch_size=1)
 
         logits = self.model(input_ids, inference_params=inference_params)
@@ -128,7 +126,7 @@ class CipherSolver:
         if next_token.item() != self.tokenizer.eos_token_id:
             generated_tokens.append(next_token.item())
 
-        for _ in range(max_new_tokens - 1):
+        for _ in range(cipher_len - 1):
             logits = self.model(next_token, inference_params=inference_params)
             next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
             

@@ -78,11 +78,16 @@ class MambaTrainer:
 
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+
+        total_steps = len(self.train_loader) * config.epochs
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
             self.optimizer,
-            mode="min",
-            factor=config.factor,
-            patience=config.patience,
+            max_lr=config.learning_rate,
+            total_steps=total_steps,
+            pct_start=config.pct_start,
+            anneal_strategy='cos',
+            div_factor=config.div_factor,
+            final_div_factor=config.final_div_factor
         )
 
         self.history = {"train_loss": [], "val_loss": [], "learning_rates": []}
@@ -162,7 +167,7 @@ class MambaTrainer:
         self.best_val_loss = checkpoint.get("val_loss", float("inf"))
 
         if "scheduler_state_dict" in checkpoint:
-             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
         history_path = self.exp_dir / "history.json"
         if history_path.exists():
@@ -187,7 +192,7 @@ class MambaTrainer:
             avg_val_loss = self._validate_one_epoch()
 
             current_lr = self.optimizer.param_groups[0]["lr"]
-            self.scheduler.step(avg_val_loss)
+            #self.scheduler.step(avg_val_loss)
 
             self.history["train_loss"].append(avg_train_loss)
             self.history["val_loss"].append(avg_val_loss)
@@ -238,6 +243,7 @@ class MambaTrainer:
 
             loss.backward()
             self.optimizer.step()
+            self.scheduler.step()
 
             total_loss += loss.item()
             batches_processed += 1
