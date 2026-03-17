@@ -79,7 +79,7 @@ class CipherSolver:
         return self
 
     @torch.no_grad()
-    def decrypt(self, input_ids: list[int] | torch.Tensor, max_new_tokens: int = None) -> str:
+    def decrypt(self, input_ids: list[int] | torch.Tensor) -> str:
         """Performs autoregressive decryption of ciphertext using the Mamba model.
 
         This method handles both legacy ciphertext-only inputs and unified sequences 
@@ -118,9 +118,7 @@ class CipherSolver:
             sep_tensor = torch.tensor([[sep_id]], device=self.device)
             input_ids = torch.cat([input_ids, sep_tensor], dim=1)
 
-        if max_new_tokens is None:
-            max_new_tokens = input_ids.size(1) + 50
-
+        max_new_tokens = input_ids.size(1) - 1
         inference_params = InferenceParams(max_seqlen=self.config.max_len, max_batch_size=1)
 
         logits = self.model(input_ids, inference_params=inference_params)

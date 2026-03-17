@@ -39,7 +39,12 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
         if not list_of_files:
             logger.error(f"No models found in {config.save_path}")
             return
-        model_path = Path(max(list_of_files, key=os.path.getmtime))
+        best_models = [f for f in list_of_files if os.path.basename(f) == "best.pth"]
+        if best_models:
+            model_path = Path(max(best_models, key=os.path.getmtime))
+            logger.info(f"Using best model found at: {model_path}")
+        else:
+            model_path = Path(max(list_of_files, key=os.path.getmtime))
 
     model_dir = model_path.parent
     logger.info(f"Eval on model: {model_path}")
