@@ -285,7 +285,6 @@ class MambaTrainer:
                 "loss": f"{loss.item():.3f}",
                 "lr": f"{current_lr:.2e}",
                 "phase": phase,
-                "step": global_step
             })
 
             step = i + 1
