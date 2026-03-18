@@ -80,6 +80,10 @@ class MambaTrainer:
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
 
+        self.total_steps = len(self.train_loader) * self.config.epochs
+        self.warmup_steps = int(self.total_steps * 0.1)
+        self.decay_start_step = int(self.total_steps * 0.9) 
+
         self.scheduler = optim.lr_scheduler.LambdaLR(
             self.optimizer, 
             lr_lambda=self._get_wsd_schedule
@@ -93,18 +97,14 @@ class MambaTrainer:
     def _get_wsd_schedule(self, current_step: int) -> float:
         """Calculates the LR multiplier for Warmup-Stable-Decay."""
 
-        total_steps = len(self.train_loader) * self.config.epochs
-        warmup_steps = int(total_steps * 0.1)
-        decay_start_step = int(total_steps * 0.9) 
+        if current_step < self.warmup_steps:
+            return float(current_step) / float(max(1, self.warmup_steps))
 
-        if current_step < warmup_steps:
-            return float(current_step) / float(max(1, warmup_steps))
-
-        if current_step < decay_start_step:
+        if current_step < self.decay_start_step:
             return 1.0
 
-        progress = float(current_step - decay_start_step) / float(
-            max(1, total_steps - decay_start_step)
+        progress = float(current_step - self.decay_start_step) / float(
+            max(1, self.total_steps - self.decay_start_step)
         )
 
         return 0.5 * (1.0 + math.cos(math.pi * progress))
@@ -216,7 +216,7 @@ class MambaTrainer:
             self._save_history()
 
             logger.info(
-                f"Epoch [{self.current_epoch + 1}/{epochs}] - "
+                f"Epoch [{self.current_epoch}/{epochs}] - "
                 f"Train Loss: {avg_train_loss:.4f} | "
                 f"Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}",
             )
@@ -249,7 +249,7 @@ class MambaTrainer:
 
         loop = tqdm(
             self.train_loader,
-            desc=f"Epoch {self.current_epoch} [Train]",
+            desc=f"Epoch {self.current_epoch + 1} [Train]",
             leave=False,
         )
 
@@ -269,10 +269,24 @@ class MambaTrainer:
             self.optimizer.step()
             self.scheduler.step(global_step)
 
+            if global_step < self.warmup_steps:
+                phase = "warmup"
+            elif global_step < self.decay_start_step:
+                phase = "stable"
+            else:
+                phase = "decay"
+
+            current_lr = self.optimizer.param_groups[0]["lr"]
+
             total_loss += loss.item()
             batches_processed += 1
             current_step_loss = loss.item()
-            loop.set_postfix(loss=current_step_loss)
+            loop.set_postfix({
+                "loss": f"{loss.item():.3f}",
+                "lr": f"{current_lr:.2e}",
+                "phase": phase,
+                "step": global_step
+            })
 
             step = i + 1
             if step % save_every_steps == 0:
