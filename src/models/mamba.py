@@ -46,7 +46,7 @@ class MambaModel(nn.Module):
                     d_state=config.d_state,
                     d_conv=config.d_conv,
                     expand=config.expand,
-                    layer_idx=i
+                    layer_idx=i,
                 ),
             })
             for i in range(config.n_layers)

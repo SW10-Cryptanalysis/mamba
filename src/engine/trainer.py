@@ -4,6 +4,7 @@ import shutil
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import math
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
@@ -79,21 +80,34 @@ class MambaTrainer:
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
 
-        total_steps = len(self.train_loader) * config.epochs
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            self.optimizer,
-            max_lr=config.learning_rate,
-            total_steps=total_steps,
-            pct_start=config.pct_start,
-            anneal_strategy='cos',
-            div_factor=config.div_factor,
-            final_div_factor=config.final_div_factor
+        self.scheduler = optim.lr_scheduler.LambdaLR(
+            self.optimizer, 
+            lr_lambda=self._get_wsd_schedule
         )
 
         self.history = {"train_loss": [], "val_loss": [], "learning_rates": []}
 
         self.best_val_loss = float("inf")
         self.current_epoch = 0
+    
+    def _get_wsd_schedule(self, current_step: int) -> float:
+        """Calculates the LR multiplier for Warmup-Stable-Decay."""
+
+        total_steps = len(self.train_loader) * self.config.epochs
+        warmup_steps = int(total_steps * 0.1)
+        decay_start_step = int(total_steps * 0.9) 
+
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+
+        if current_step < decay_start_step:
+            return 1.0
+
+        progress = float(current_step - decay_start_step) / float(
+            max(1, total_steps - decay_start_step)
+        )
+
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
 
     def _save_config(self) -> None:
         """Save the current configuration to a JSON file."""
@@ -116,6 +130,7 @@ class MambaTrainer:
             val_loss: Current loss.
             is_best: If true, copies to best.pth.
             suffix: Optional string (e.g., 'step_5000') for intra-epoch saves.
+
         """
         state = {
             "epoch": self.current_epoch,
@@ -132,7 +147,7 @@ class MambaTrainer:
         base_name = f"epoch_{self.current_epoch:03d}"
         if suffix:
             base_name += f"_{suffix}"
-        
+
         epoch_filename = f"{base_name}.pth"
         epoch_path = self.exp_dir / epoch_filename
         torch.save(state, epoch_path)
@@ -201,7 +216,7 @@ class MambaTrainer:
             self._save_history()
 
             logger.info(
-                f"Epoch [{self.current_epoch}/{epochs}] - "
+                f"Epoch [{self.current_epoch + 1}/{epochs}] - "
                 f"Train Loss: {avg_train_loss:.4f} | "
                 f"Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}",
             )
@@ -218,13 +233,20 @@ class MambaTrainer:
                 break
 
     def _train_one_epoch(self) -> float:
+        """Run a single epoch of training, processing batches from the training loader.
+
+        Returns:
+            float: The average training loss across all processed batches in 
+                the current epoch.
+
+        """
         self.model.train()
         total_loss = 0
         batches_processed = 0
         resume_step = getattr(self, "resume_step", 0)
 
-        save_every_steps = self.config.save_step 
-        
+        save_every_steps = self.config.save_step
+
         loop = tqdm(
             self.train_loader,
             desc=f"Epoch {self.current_epoch} [Train]",
@@ -235,6 +257,8 @@ class MambaTrainer:
             if i < resume_step:
                 continue
 
+            global_step = (self.current_epoch * len(self.train_loader)) + i
+
             self.current_step = i
             self.optimizer.zero_grad()
 
@@ -243,7 +267,7 @@ class MambaTrainer:
 
             loss.backward()
             self.optimizer.step()
-            self.scheduler.step()
+            self.scheduler.step(global_step)
 
             total_loss += loss.item()
             batches_processed += 1
@@ -261,15 +285,22 @@ class MambaTrainer:
 
                 logger.info(f"\nStep {step}: Saving intermediate checkpoint...")
                 self._save_checkpoint(
-                    val_loss=current_step_loss, 
-                    is_best=False, 
-                    suffix=f"step_{step}"
+                    val_loss=current_step_loss,
+                    is_best=False,
+                    suffix=f"step_{step}",
                 )
 
         self.resume_step = 0
         return total_loss / max(1, batches_processed)
 
     def _validate_one_epoch(self) -> float:
+        """Evaluates the model on the validation dataset for one epoch.
+
+        Returns:
+            float: The average validation loss across all batches in the 
+                validation loader.
+
+        """
         self.model.eval()
         total_loss = 0
         loop = tqdm(self.val_loader, desc=f"Epoch {self.current_epoch} [Val]", leave=False)
@@ -283,8 +314,18 @@ class MambaTrainer:
 
         return total_loss / len(self.val_loader)
 
-    def _compute_batch_loss(self, batch):
-        """Unified loss calculation for Causal Language Modeling."""
+    def _compute_batch_loss(self, batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Computes the Causal Language Modeling (CLM) loss for a single batch.
+
+        Args:
+            batch: A batch of data, either as a dictionary containing "input_ids" 
+                and "labels", or a tuple/list in the form (input_ids, labels).
+
+        Returns:
+            torch.Tensor: A scalar tensor representing the CrossEntropy loss 
+                for the batch.
+
+        """
         if not isinstance(batch, dict):
             input_ids, labels = batch
         else:

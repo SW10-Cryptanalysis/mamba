@@ -114,7 +114,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
                     "id": str(filename),
                     "ser": round(ser, 4),
                     "predicted": deciphered_text,
-                    "ground_truth": current_ground_truth
+                    "ground_truth": current_ground_truth,
                 }
                 f_out.write(json.dumps(result_entry) + "\n")
                 f_out.flush()
@@ -123,7 +123,7 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
                 logger.error(f"Error processing sample {i}: {e}")
                 traceback.print_exc()
                 continue
-    
+
     if all_ser_scores:
         avg_ser = sum(all_ser_scores) / len(all_ser_scores)
         summary = {
@@ -131,13 +131,13 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
             "average_ser": round(avg_ser, 4),
             "total_samples": len(all_ser_scores),
             "best_ser": round(min(all_ser_scores), 4),
-            "worst_ser": round(max(all_ser_scores), 4)
+            "worst_ser": round(max(all_ser_scores), 4),
         }
         summary_path = model_dir / f"summary_{model_path.stem}.json"
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=4)
-        
-        logger.info(f"--- EVALUATION SUMMARY ---")
+
+        logger.info("--- EVALUATION SUMMARY ---")
         logger.info(f"Final Average SER: {avg_ser:.4f}")
         logger.info(f"Results saved to: {summary_path}")
 
