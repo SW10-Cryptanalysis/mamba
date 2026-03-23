@@ -153,6 +153,7 @@ class DataManager:
 
 		Args:
 			base_path: The root directory containing experiment folders.
+			prefix: prefix of which experiment was conducted.
 
 		Returns:
 			The path to the most recent checkpoint, or None if none are found.
@@ -168,17 +169,17 @@ class DataManager:
 
 	@staticmethod
 	def safe_pad_collate(
-		batch: list[dict[str, torch.Tensor | list[int]]], 
-		pad_token_id: int = 0, 
-		ignore_index: int = -100
+		batch: list[dict[str, torch.Tensor | list[int]]],
+		pad_token_id: int = 0,
+		ignore_index: int = -100,
 	) -> dict[str, torch.Tensor]:
-		"""Custom collate function that pads sequences to a multiple of 8.
+		"""Pad sequences to a multiple of 8.
 
 		Args:
-			batch: A list of dictionaries from the Dataset, where each dict contains 
+			batch: A list of dictionaries from the Dataset, where each dict contains
 				"input_ids" and "labels".
 			pad_token_id: The ID used to pad the `input_ids`. Defaults to 0.
-			ignore_index: The value used to pad `labels`, signaling the loss 
+			ignore_index: The value used to pad `labels`, signaling the loss
 				function to ignore these positions. Defaults to -100.
 
 		Returns:

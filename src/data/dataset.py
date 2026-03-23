@@ -1,4 +1,5 @@
 from typing import Literal
+from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from datasets import load_from_disk
@@ -85,7 +86,11 @@ class CipherDataset(Dataset):
                     "internal_name": internal_name if internal_name is not None else "",
                 }
 
-                return torch.tensor(eval_input, dtype=torch.long), data["plaintext"], metadata
+                return (
+                    torch.tensor(eval_input, dtype=torch.long),
+                    data["plaintext"],
+                    metadata,
+                )
 
             encoded_plain = self.tokenizer.encode(data["plaintext"])
             sep_id = self.tokenizer.sep_token_id
@@ -107,19 +112,67 @@ class CipherDataset(Dataset):
             raise e
 
 class PretokenizedCipherDataset(Dataset):
-    def __init__(self, directory_path, max_seq_len, config: Config):
+    """A Dataset for handling pre-tokenized cipher sequences stored in Arrow format.
+
+    This dataset is designed for models that use a unified input sequence where the
+    ciphertext and plaintext are separated by a specific [SEP] token. It manages
+    the masking of labels to ensure the model only calculates loss on the
+    predicted plaintext tokens.
+
+    Attributes:
+        dataset: The underlying Hugging Face/Arrow dataset loaded from disk.
+        max_seq_len (int): The fixed length to which all sequences are padded
+            or truncated.
+        sep_token_id (int): The unique token ID used to separate cipher
+            and plain text.
+
+    """
+
+    def __init__(
+        self,
+        directory_path: Path,
+        max_seq_len: int,
+        config: Config,
+    ) -> None:
+        """Initialize the dataset with file paths and configuration.
+
+        Args:
+            directory_path: Path to the directory containing the pre-tokenized
+                Arrow dataset files.
+            max_seq_len: The fixed sequence length for the model. Inputs will
+                be padded or truncated to this value.
+            config: Configuration object used to derive the separator token ID
+                based on the number of unique homophones.
+
+        """
         self.dataset = load_from_disk(str(directory_path))
         self.max_seq_len = max_seq_len
         self.sep_token_id = config.unique_homophones + 1
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return the total number of samples in the dataset."""
         return len(self.dataset)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[torch.Tensor, torch.Tensor]:
+        """Retrieve a sample, applies the [SEP] mask to labels, and pads to max_seq_len.
+
+        Args:
+            idx: The index of the sample to retrieve.
+
+        Returns:
+            dict: {
+                "input_ids": LongTensor of shape (max_seq_len,),
+                "labels": LongTensor of shape (max_seq_len,) with masked ciphertext.
+            }
+
+        """
         item = self.dataset[idx]
         input_ids = item["input_ids"]
 
-        input_list = input_ids.tolist() if torch.is_tensor(input_ids) else list(input_ids)
+        if torch.is_tensor(input_ids):
+            input_list = input_ids.tolist()
+        else:
+            input_list = list(input_ids)
         curr_len = len(input_list)
 
         sep_id = self.sep_token_id
@@ -130,7 +183,7 @@ class PretokenizedCipherDataset(Dataset):
             new_labels = list(item["labels"])
 
         pad_len = self.max_seq_len - curr_len
-        
+
         if pad_len > 0:
             input_list = input_list + [0] * pad_len
             new_labels = new_labels + [-100] * pad_len

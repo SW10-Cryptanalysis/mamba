@@ -55,11 +55,18 @@ class MambaModel(nn.Module):
         self.norm_f = RMSNorm(config.d_model)
         self.lm_head = nn.Linear(config.d_model, vocab_size, bias=False)
 
-    def forward(self, x: torch.Tensor, inference_params: InferenceParams = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        inference_params: InferenceParams = None,
+    ) -> torch.Tensor:
         """Perform a forward pass through the network.
 
         Args:
             x: Input tensor of token IDs with shape (batch_size, seq_len).
+            inference_params: Object containing state information
+                used for efficient incremental inference.
+                If None, a standard dense forward pass is performed.
 
         Returns:
             Logits tensor with shape (batch_size, seq_len, vocab_size).

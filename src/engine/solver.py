@@ -80,23 +80,23 @@ class CipherSolver:
 
     @torch.no_grad()
     def decrypt(self, input_ids: str | list[int] | torch.Tensor) -> str:
-        """Performs autoregressive decryption of ciphertext using the Mamba model.
+        """Perform autoregressive decryption of ciphertext using the Mamba model.
 
-        This method handles both legacy ciphertext-only inputs and unified sequences 
+        This method handles both legacy ciphertext-only inputs and unified sequences
         containing a separator.
 
         Args:
-            input_ids: The sequence to decrypt. Can be a list of integer token IDs 
-                or a torch.Tensor. If a unified sequence (Cipher + SEP 
-                + Plain) is provided, tokens after the SEP are discarded before 
+            input_ids: The sequence to decrypt. Can be a list of integer token IDs
+                or a torch.Tensor. If a unified sequence (Cipher + SEP
+                + Plain) is provided, tokens after the SEP are discarded before
                 generation begins.
 
         Returns:
             str: The decrypted plaintext string, decoded via the tokenizer.
 
         Note:
-            The method automatically appends a SEP token if one is not present in 
-            the input, signaling the model to begin the transition from cipher 
+            The method automatically appends a SEP token if one is not present in
+            the input, signaling the model to begin the transition from cipher
             processing to plaintext generation.
 
         """
@@ -119,7 +119,9 @@ class CipherSolver:
             input_ids = torch.cat([input_ids, sep_tensor], dim=1)
 
         cipher_len = input_ids.size(1) - 2
-        inference_params = InferenceParams(max_seqlen=self.config.max_len, max_batch_size=1)
+        inference_params = InferenceParams(
+            max_seqlen=self.config.max_len, max_batch_size=1,
+        )
 
         logits = self.model(input_ids, inference_params=inference_params)
         next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
@@ -130,7 +132,8 @@ class CipherSolver:
 
         for _ in range(cipher_len - 1):
             logits = self.model(next_token, inference_params=inference_params)
-            next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
+            logits_last = logits[:, -1, :]
+            next_token = torch.argmax(logits_last, dim=-1).view(1, 1).to(self.device)
 
             token_id = next_token.item()
             generated_tokens.append(token_id)

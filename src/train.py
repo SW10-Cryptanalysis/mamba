@@ -14,7 +14,11 @@ from src.engine.trainer import MambaTrainer
 
 logger = get_logger("train.py")
 
-def resolve_config(resume_arg: str | None, config: Config, run_type: str) -> tuple[Path | None, Path | None]:
+def resolve_config(
+    resume_arg: str | None,
+    config: Config,
+    run_type: str,
+) -> tuple[Path | None, Path | None]:
     """Handle checkpoint auto-detection and sync config from existing experiments."""
     save_path = Path(config.save_path)
     resume_path = None
@@ -45,24 +49,48 @@ def resolve_config(resume_arg: str | None, config: Config, run_type: str) -> tup
 
     return resume_path, target_exp_dir
 
-def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader, DataLoader]:
+def get_loaders(
+    config: Config,
+    tokenizer: CipherTokenizer,
+) -> tuple[DataLoader, DataLoader]:
     """Initialize training and validation data loaders with format detection."""
     train_path = Path(config.train_data_dir).resolve()
     valid_path = Path(config.valid_data_dir).resolve()
 
-    is_arrow = (train_path / "dataset_info.json").exists() or any(train_path.glob("*.arrow"))
+    is_arrow = (
+        (train_path / "dataset_info.json").exists()
+        or any(train_path.glob("*.arrow"))
+    )
 
     if is_arrow:
         logger.info("Arrow format detected. Using PretokenizedCipherDataset.")
-        train_ds = PretokenizedCipherDataset(train_path, max_seq_len=config.max_len, config=config)
-        val_ds = PretokenizedCipherDataset(valid_path, max_seq_len=config.max_len, config=config)
+        train_ds = PretokenizedCipherDataset(
+            train_path,
+            max_seq_len=config.max_len,
+            config=config,
+        )
+        val_ds = PretokenizedCipherDataset(
+            valid_path,
+            max_seq_len=config.max_len,
+            config=config,
+        )
     else:
         logger.info("Legacy format detected. Scanning directory for JSON/ZIPs...")
         train_files = DataManager.scan_directory(train_path)
         valid_files = DataManager.scan_directory(valid_path)
 
-        train_ds = CipherDataset(train_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
-        val_ds = CipherDataset(valid_files, max_seq_len=config.max_len, tokenizer=tokenizer, mode="train")
+        train_ds = CipherDataset(
+            train_files,
+            max_seq_len=config.max_len,
+            tokenizer=tokenizer,
+            mode="train",
+        )
+        val_ds = CipherDataset(
+            valid_files,
+            max_seq_len=config.max_len,
+            tokenizer=tokenizer,
+            mode="train",
+        )
 
     collate_fn = partial(
         DataManager.safe_pad_collate,
@@ -75,7 +103,7 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
         "batch_size": config.batch_size,
         "num_workers": num_workers,
         "pin_memory": True,
-        "persistent_workers": True if num_workers > 0 else False,
+        "persistent_workers": num_workers > 0,
         "collate_fn": collate_fn,
     }
 
@@ -90,7 +118,11 @@ def get_loaders(config: Config, tokenizer: CipherTokenizer) -> tuple[DataLoader,
 
     return train_loader, val_loader
 
-def train_model(resume_arg: str | None = None, use_spaces: bool = False, device: str = "cuda") -> None:
+def train_model(
+    resume_arg: str | None = None,
+    use_spaces: bool = False,
+    device: str = "cuda",
+) -> None:
     """Execute the full training pipeline."""
     config = Config()
 
@@ -136,7 +168,11 @@ def train_model(resume_arg: str | None = None, use_spaces: bool = False, device:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", nargs="?", const="auto", default=None)
-    parser.add_argument("--spaces", action="store_true", help="Train on the dataset containing spaces.")
+    parser.add_argument(
+        "--spaces",
+        action="store_true",
+        help="Train on the dataset containing spaces.",
+    )
     args = parser.parse_args()
 
     train_model(resume_arg=args.resume, use_spaces=args.spaces)

@@ -54,6 +54,7 @@ class MambaTrainer:
             val_loader: DataLoader providing validation samples.
             config: Config instance containing training hyperparameters.
             save_path: Path where experiment folders will be created.
+            run_type: Normal or spaced training,
             exp_dir: Optional path to an existing experiment directory
                 (used for resuming).
             device: Device to use for training. Defaults to "cuda".
@@ -82,11 +83,11 @@ class MambaTrainer:
 
         self.total_steps = len(self.train_loader) * self.config.epochs
         self.warmup_steps = int(self.total_steps * 0.1)
-        self.decay_start_step = int(self.total_steps * 0.9) 
+        self.decay_start_step = int(self.total_steps * 0.9)
 
         self.scheduler = optim.lr_scheduler.LambdaLR(
-            self.optimizer, 
-            lr_lambda=self._get_wsd_schedule
+            self.optimizer,
+            lr_lambda=self._get_wsd_schedule,
         )
 
         self.history = {"train_loss": [], "val_loss": [], "learning_rates": []}
@@ -97,10 +98,14 @@ class MambaTrainer:
         total, trainable = self.count_parameters(self.model)
         logger.info(f"Total Parameters: {total:,}")
         logger.info(f"Trainable Parameters: {trainable:,}")
-    
-    def _get_wsd_schedule(self, current_step: int) -> float:
-        """Calculates the LR multiplier for Warmup-Stable-Decay."""
 
+    def _get_wsd_schedule(self, current_step: int) -> float:
+        """Calculate the LR multiplier for Warmup-Stable-Decay.
+
+        Args:
+            current_step: How many steps of training have passed.
+
+        """
         if current_step < self.warmup_steps:
             return float(current_step) / float(max(1, self.warmup_steps))
 
@@ -108,7 +113,7 @@ class MambaTrainer:
             return 1.0
 
         progress = float(current_step - self.decay_start_step) / float(
-            max(1, self.total_steps - self.decay_start_step)
+            max(1, self.total_steps - self.decay_start_step),
         )
 
         return 0.5 * (1.0 + math.cos(math.pi * progress))
@@ -127,9 +132,14 @@ class MambaTrainer:
             json.dump(self.history, f, indent=4)
         logger.info(f"History updated at {history_path}")
 
-    def _save_checkpoint(self, val_loss: float, is_best: bool, suffix: str = None) -> None:
+    def _save_checkpoint(
+        self,
+        val_loss: float,
+        is_best: bool,
+        suffix: str = None,
+    ) -> None:
         """Save a model checkpoint.
-        
+
         Args:
             val_loss: Current loss.
             is_best: If true, copies to best.pth.
@@ -240,7 +250,7 @@ class MambaTrainer:
         """Run a single epoch of training, processing batches from the training loader.
 
         Returns:
-            float: The average training loss across all processed batches in 
+            float: The average training loss across all processed batches in
                 the current epoch.
 
         """
@@ -295,10 +305,11 @@ class MambaTrainer:
             if step % save_every_steps == 0:
                 prev_step = step - save_every_steps
                 if prev_step > 0:
-                    prev_checkpoint = self.exp_dir / f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
+                    ckpt_name = f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
+                    prev_checkpoint = self.exp_dir / ckpt_name
                     if prev_checkpoint.exists():
                         prev_checkpoint.unlink()
-                        logger.info(f"Cleaned up intermediate checkpoint: {prev_checkpoint.name}")
+                        logger.info(f"Removed old checkpoint: {prev_checkpoint.name}")
 
                 logger.info(f"\nStep {step}: Saving intermediate checkpoint...")
                 self._save_checkpoint(
@@ -311,16 +322,20 @@ class MambaTrainer:
         return total_loss / max(1, batches_processed)
 
     def _validate_one_epoch(self) -> float:
-        """Evaluates the model on the validation dataset for one epoch.
+        """Evaluate the model on the validation dataset for one epoch.
 
         Returns:
-            float: The average validation loss across all batches in the 
+            float: The average validation loss across all batches in the
                 validation loader.
 
         """
         self.model.eval()
         total_loss = 0
-        loop = tqdm(self.val_loader, desc=f"Epoch {self.current_epoch} [Val]", leave=False)
+        loop = tqdm(
+            self.val_loader,
+            desc=f"Epoch {self.current_epoch} [Val]",
+            leave=False,
+        )
 
         with torch.no_grad():
             for batch in loop:
@@ -331,15 +346,18 @@ class MambaTrainer:
 
         return total_loss / len(self.val_loader)
 
-    def _compute_batch_loss(self, batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-        """Computes the Causal Language Modeling (CLM) loss for a single batch.
+    def _compute_batch_loss(
+        self,
+        batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        """Compute the loss for a single batch.
 
         Args:
-            batch: A batch of data, either as a dictionary containing "input_ids" 
+            batch: A batch of data, either as a dictionary containing "input_ids"
                 and "labels", or a tuple/list in the form (input_ids, labels).
 
         Returns:
-            torch.Tensor: A scalar tensor representing the CrossEntropy loss 
+            torch.Tensor: A scalar tensor representing the CrossEntropy loss
                 for the batch.
 
         """
@@ -364,6 +382,7 @@ class MambaTrainer:
         return loss
 
     def count_parameters(self, model: nn.Module) -> tuple[int, int]:
+        """Count parameters for model."""
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 

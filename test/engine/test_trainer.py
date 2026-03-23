@@ -49,7 +49,7 @@ def test_trainer_step_logic(cpu_trainer_setup):
     trainer = cpu_trainer_setup
 
     for param_group in trainer.optimizer.param_groups:
-        param_group['lr'] = 1.0
+        param_group["lr"] = 1.0
 
     # Capture weights before a step
     params = list(trainer.model.parameters())

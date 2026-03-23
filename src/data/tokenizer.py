@@ -6,17 +6,25 @@ class CipherTokenizer:
 
     Attributes:
         config (Config): Configuration object containing vocabulary sizes and offsets.
-        pad_token_id (int): ID used for padding sequences (default is 0).
-        sep_token (int): ID used as a separator, calculated based on cipher vocabulary.
+        pad_token_id (int): ID used for padding sequences (0).
+        sep_token_id (int): ID used to separate cipher from plain text.
+        space_token_id (int): ID specifically for the space character.
+        eos_token_id (int): ID used to signify the end of a sequence.
         char_offset (int): The starting index for plaintext character IDs to avoid
             collisions with cipher homophones.
-        char_to_id (dict[str, int]): Mapping from lowercase characters to raw indices.
-        id_to_char (dict[int, str]): Mapping from offset integer IDs back to
-            plaintext characters.
+        char_to_id (dict[str, int]): Mapping from characters to their integer IDs.
+        id_to_char (dict[int, str]): Mapping from integer IDs back to characters.
 
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
+        """Initialize the tokenizer with offsets and character mappings.
+
+        Args:
+            config: Configuration object used to determine token offsets based
+                on the number of unique homophones in the cipher.
+
+        """
         self.config = config
         self.pad_token_id = 0
 
@@ -71,11 +79,11 @@ class CipherTokenizer:
         """Convert token IDs back to a string, filtering out special control tokens.
 
         Args:
-            ids: A list of integer IDs or a torch.Tensor to be decoded. 
+            ids: A list of integer IDs or a torch.Tensor to be decoded.
                 Handles both 1D and multi-dimensional tensors by flattening.
 
         Returns:
-            str: The decoded string containing only mapped characters, 
+            str: The decoded string containing only mapped characters,
                 excluding PAD, SEP, and EOS tokens.
 
         """
