@@ -93,6 +93,10 @@ class MambaTrainer:
 
         self.best_val_loss = float("inf")
         self.current_epoch = 0
+
+        total, trainable = self.count_parameters(self.model)
+        logger.info(f"Total Parameters: {total:,}")
+        logger.info(f"Trainable Parameters: {trainable:,}")
     
     def _get_wsd_schedule(self, current_step: int) -> float:
         """Calculates the LR multiplier for Warmup-Stable-Decay."""
@@ -358,3 +362,9 @@ class MambaTrainer:
             shift_labels.view(-1),
         )
         return loss
+
+    def count_parameters(self, model: nn.Module) -> tuple[int, int]:
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        return total_params, trainable_params

@@ -131,8 +131,6 @@ class CipherSolver:
             next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1).to(self.device)
 
             token_id = next_token.item()
-            if token_id == self.tokenizer.eos_token_id:
-                break
             generated_tokens.append(token_id)
 
         return self.tokenizer.decode(generated_tokens)
