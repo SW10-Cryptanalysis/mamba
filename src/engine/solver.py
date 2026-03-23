@@ -79,7 +79,7 @@ class CipherSolver:
         return self
 
     @torch.no_grad()
-    def decrypt(self, input_ids: list[int] | torch.Tensor) -> str:
+    def decrypt(self, input_ids: str | list[int] | torch.Tensor) -> str:
         """Performs autoregressive decryption of ciphertext using the Mamba model.
 
         This method handles both legacy ciphertext-only inputs and unified sequences 
@@ -103,6 +103,8 @@ class CipherSolver:
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
+        if isinstance(input_ids, str):
+            input_ids = [int(x) for x in input_ids.split()]
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids], dtype=torch.long).to(self.device)
         elif input_ids.dim() == 1:

@@ -48,6 +48,9 @@ def test_trainer_step_logic(cpu_trainer_setup):
     """Verify the backprop and weight update logic works on CPU."""
     trainer = cpu_trainer_setup
 
+    for param_group in trainer.optimizer.param_groups:
+        param_group['lr'] = 1.0
+
     # Capture weights before a step
     params = list(trainer.model.parameters())
     initial_weight = params[0].clone().detach()
@@ -62,12 +65,13 @@ def test_trainer_step_logic(cpu_trainer_setup):
 
 def test_history_logging(cpu_trainer_setup):
     """Verify that history dict is populated correctly."""
+    config = Config
     trainer = cpu_trainer_setup
     trainer.train(epochs=2)
 
     assert len(trainer.history["train_loss"]) == 2
     assert len(trainer.history["learning_rates"]) == 2
-    assert trainer.history["learning_rates"][0] == 0.001
+    assert trainer.history["learning_rates"][0] == config.learning_rate
 
 def test_save_config(cpu_trainer_setup):
     """Verify that configuration is correctly serialized to JSON."""

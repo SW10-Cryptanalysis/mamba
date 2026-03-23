@@ -117,19 +117,26 @@ class PretokenizedCipherDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataset[idx]
-
         input_ids = item["input_ids"]
-        labels = item["labels"]
-
-        sep_id = self.sep_token_id
 
         input_list = input_ids.tolist() if torch.is_tensor(input_ids) else list(input_ids)
+        curr_len = len(input_list)
 
+        sep_id = self.sep_token_id
         if sep_id in input_list:
             sep_idx = input_list.index(sep_id)
             new_labels = ([-100] * (sep_idx + 1)) + input_list[sep_idx + 1:]
         else:
-            new_labels = labels
+            new_labels = list(item["labels"])
+
+        pad_len = self.max_seq_len - curr_len
+        
+        if pad_len > 0:
+            input_list = input_list + [0] * pad_len
+            new_labels = new_labels + [-100] * pad_len
+        else:
+            input_list = input_list[:self.max_seq_len]
+            new_labels = new_labels[:self.max_seq_len]
 
         return {
             "input_ids": torch.tensor(input_list, dtype=torch.long),

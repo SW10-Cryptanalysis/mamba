@@ -29,7 +29,8 @@ pythonpath = ["."]
 testpaths = ["test"]
 norecursedirs = ["train_data"]
 filterwarnings = [
-    "ignore:This process .* is multi-threaded, use of fork:DeprecationWarning"
+    "ignore:This process .* is multi-threaded, use of fork:DeprecationWarning",
+    "ignore:.*scheduler.step().*not necessary.*:UserWarning"
 ]
 
 [tool.uv]

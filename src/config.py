@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+TEXT_LEN = 9961
+TOTAL_SEQ = TEXT_LEN * 2 + 3
+
 @dataclass
 class Config:
 	"""Dataclass for MambaCipherSolver configuration.
@@ -69,6 +72,6 @@ class Config:
 	homophone_file: str = "metadata.json"
 
 	plain_vocab_size: int = 26
-	unique_homophones: int = 2494
-	max_len: int = 20000
+	unique_homophones: int = 2503
+	max_len: int = TOTAL_SEQ
 	buffer: int = 50
