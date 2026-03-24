@@ -19,16 +19,17 @@ def mock_eval_env(tmp_path):
 
 @patch("src.eval.CipherSolver")
 @patch("src.eval.DataLoader")
-@patch("src.eval.CipherDataset")
-@patch("src.eval.DataManager.scan_directory")
+@patch("src.eval.PretokenizedCipherDataset")
+@patch("src.eval.Path.exists")
 def test_test_model_logic(
-    mock_scan,
+    mock_exists,
     mock_dataset,
     mock_loader,
     mock_solver_class,
     mock_eval_env
 ):
     test_dir, model_path = mock_eval_env
+    mock_exists.return_value = True
 
     mock_solver = mock_solver_class.return_value
     mock_solver.decrypt.return_value = "hello"
@@ -48,7 +49,7 @@ def test_test_model_logic(
 
     fake_batch = {
         "input_ids": mock_input,
-        "labels": torch.tensor([[-100, -100, -100, 10, 11]]),
+        "labels": mock_input,
         "id": ["sample_001"],
     }
     mock_loader.return_value = [fake_batch]

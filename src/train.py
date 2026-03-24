@@ -8,7 +8,7 @@ from src.models.mamba import MambaModel
 from src.utils.logging import get_logger
 from src.config import Config
 from src.utils.data_manager import DataManager
-from src.data.dataset import CipherDataset, PretokenizedCipherDataset
+from src.data.dataset import PretokenizedCipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
 
@@ -57,40 +57,23 @@ def get_loaders(
     train_path = Path(config.train_data_dir).resolve()
     valid_path = Path(config.valid_data_dir).resolve()
 
-    is_arrow = (
-        (train_path / "dataset_info.json").exists()
-        or any(train_path.glob("*.arrow"))
+    if not (train_path / "dataset_info.json").exists():
+        raise FileNotFoundError(
+            f"Arrow dataset not found at {train_path}. "
+            "Ensure the data has been pre-tokenized into Arrow format.",
+        )
+
+    logger.info(f"Loading Arrow dataset from {train_path}")
+    train_ds = PretokenizedCipherDataset(
+        train_path,
+        max_seq_len=config.max_len,
+        config=config,
     )
-
-    if is_arrow:
-        logger.info("Arrow format detected. Using PretokenizedCipherDataset.")
-        train_ds = PretokenizedCipherDataset(
-            train_path,
-            max_seq_len=config.max_len,
-            config=config,
-        )
-        val_ds = PretokenizedCipherDataset(
-            valid_path,
-            max_seq_len=config.max_len,
-            config=config,
-        )
-    else:
-        logger.info("Legacy format detected. Scanning directory for JSON/ZIPs...")
-        train_files = DataManager.scan_directory(train_path)
-        valid_files = DataManager.scan_directory(valid_path)
-
-        train_ds = CipherDataset(
-            train_files,
-            max_seq_len=config.max_len,
-            tokenizer=tokenizer,
-            mode="train",
-        )
-        val_ds = CipherDataset(
-            valid_files,
-            max_seq_len=config.max_len,
-            tokenizer=tokenizer,
-            mode="train",
-        )
+    val_ds = PretokenizedCipherDataset(
+        valid_path,
+        max_seq_len=config.max_len,
+        config=config,
+    )
 
     collate_fn = partial(
         DataManager.safe_pad_collate,
