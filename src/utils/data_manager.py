@@ -1,5 +1,3 @@
-import json
-import zipfile
 from pathlib import Path
 import torch
 from src.utils.logging import get_logger
@@ -15,25 +13,6 @@ class DataManager:
 		logger (Logger): The logging instance for tracking data operations.
 
 	"""
-
-	@staticmethod
-	def load_sample(path: str, internal_name: str | None = None) -> dict:
-		"""Read JSON data from either a direct file path or a ZIP archive.
-
-		Args:
-			path (str): The absolute filesystem path to the target file or ZIP archive.
-			internal_name (str | None): The name of the specific file inside the ZIP
-				archive to be read. Defaults to None for non-compressed files.
-
-		Returns:
-			dict: The parsed JSON content as a dictionary.
-
-		"""
-		if internal_name:
-			with zipfile.ZipFile(path, "r") as z, z.open(internal_name) as f:
-				return json.load(f)
-		with open(path) as f:
-			return json.load(f)
 
 	@staticmethod
 	def get_latest_checkpoint(base_path: Path, prefix: str = "exp_*") -> Path | None:
