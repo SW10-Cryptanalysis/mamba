@@ -153,45 +153,34 @@ class PretokenizedCipherDataset(Dataset):
         """Return the total number of samples in the dataset."""
         return len(self.dataset)
 
-    def __getitem__(self, idx: int) -> dict[torch.Tensor, torch.Tensor]:
-        """Retrieve a sample, applies the [SEP] mask to labels, and pads to max_seq_len.
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        """Retrieve a sample, truncate to max_seq_len, reutrn raw tensors.
 
         Args:
             idx: The index of the sample to retrieve.
 
         Returns:
             dict: {
-                "input_ids": LongTensor of shape (max_seq_len,),
-                "labels": LongTensor of shape (max_seq_len,) with masked ciphertext.
+                "input_ids": LongTensor of variable length <= max_seq_len,
+                "labels": LongTensor of variable length <= max_seq_len.
             }
 
         """
         item = self.dataset[idx]
         input_ids = item["input_ids"]
+        labels = item["labels"]
 
         if torch.is_tensor(input_ids):
             input_list = input_ids.tolist()
         else:
             input_list = list(input_ids)
-        curr_len = len(input_list)
 
-        sep_id = self.sep_token_id
-        if sep_id in input_list:
-            sep_idx = input_list.index(sep_id)
-            new_labels = ([-100] * (sep_idx + 1)) + input_list[sep_idx + 1:]
-        else:
-            new_labels = list(item["labels"])
+        label_list = labels.tolist() if torch.is_tensor(labels) else list(labels)
 
-        pad_len = self.max_seq_len - curr_len
-
-        if pad_len > 0:
-            input_list = input_list + [0] * pad_len
-            new_labels = new_labels + [-100] * pad_len
-        else:
-            input_list = input_list[:self.max_seq_len]
-            new_labels = new_labels[:self.max_seq_len]
+        input_list = input_list[:self.max_seq_len]
+        label_list = label_list[:self.max_seq_len]
 
         return {
             "input_ids": torch.tensor(input_list, dtype=torch.long),
-            "labels": torch.tensor(new_labels, dtype=torch.long),
+            "labels": torch.tensor(label_list, dtype=torch.long),
         }

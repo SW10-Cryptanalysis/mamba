@@ -221,7 +221,6 @@ class MambaTrainer:
             avg_val_loss = self._validate_one_epoch()
 
             current_lr = self.optimizer.param_groups[0]["lr"]
-            #self.scheduler.step(avg_val_loss)
 
             self.history["train_loss"].append(avg_train_loss)
             self.history["val_loss"].append(avg_val_loss)
@@ -280,6 +279,7 @@ class MambaTrainer:
                 loss = self._compute_batch_loss(batch)
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             self.scheduler.step(global_step)
 

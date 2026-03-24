@@ -34,30 +34,22 @@ def test_test_model_logic(
     mock_solver.decrypt.return_value = "hello"
     mock_solver.calculate_ser.return_value = 0.0
 
-    # 1. Define your separator ID (must match what solver.tokenizer expects)
-    # 1. Define a specific sep_id
-    # 1. Setup the Solver Mock properly
     mock_solver = mock_solver_class.return_value
 
-    # Ensure the tokenizer's decode method returns a real string
     mock_solver.tokenizer.decode.return_value = "hello"
 
-    # Ensure the sep_token_id is a real integer
     test_sep_id = 100
     mock_solver.tokenizer.sep_token_id = test_sep_id
 
-    # Ensure metrics are real numbers
     mock_solver.calculate_ser.return_value = 0.0
     mock_solver.decrypt.return_value = "hello_decrypted"
 
-    # 2. Match your mock input to that SEP ID
     mock_input = torch.tensor([[1, 2, test_sep_id, 4, 5]])
 
-    # 3. Use a real list of IDs/Strings in the batch
     fake_batch = {
         "input_ids": mock_input,
         "labels": torch.tensor([[-100, -100, -100, 10, 11]]),
-        "id": ["sample_001"], # Real string, not a mock
+        "id": ["sample_001"],
     }
     mock_loader.return_value = [fake_batch]
 
