@@ -70,7 +70,9 @@ class PretokenizedCipherDataset(Dataset):
         else:
             input_list = list(input_ids)
 
-        label_list = labels.tolist() if torch.is_tensor(labels) else list(labels)
+        label_list = (
+            labels.tolist() if isinstance(labels, torch.Tensor) else list(labels)
+        )
 
         input_list = input_list[:self.max_seq_len]
         label_list = label_list[:self.max_seq_len]
