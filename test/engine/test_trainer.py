@@ -39,7 +39,6 @@ def cpu_trainer_setup(tmp_path):
         train_loader=loader,
         val_loader=loader,
         config=config,
-        save_path=save_path,
         device="cpu"
     )
     return trainer

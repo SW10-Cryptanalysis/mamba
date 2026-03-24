@@ -1,8 +1,8 @@
 import pytest
 import json
 import torch
-from unittest.mock import patch
 import src.eval as eval_module
+
 
 @pytest.fixture
 def mock_eval_env(tmp_path):
@@ -17,26 +17,17 @@ def mock_eval_env(tmp_path):
 
     return test_dir, model_path
 
-@patch("src.eval.CipherSolver")
-@patch("src.eval.DataLoader")
-@patch("src.eval.PretokenizedCipherDataset")
-@patch("src.eval.Path.exists")
-def test_test_model_logic(
-    mock_exists,
-    mock_dataset,
-    mock_loader,
-    mock_solver_class,
-    mock_eval_env
-):
+
+def test_test_model_logic(mocker, mock_eval_env):
     test_dir, model_path = mock_eval_env
-    mock_exists.return_value = True
+
+    mocker.patch("src.eval.Path.exists", return_value=True)
+    mocker.patch("src.eval.PretokenizedCipherDataset")
+
+    mock_loader = mocker.patch("src.eval.DataLoader")
+    mock_solver_class = mocker.patch("src.eval.CipherSolver")
 
     mock_solver = mock_solver_class.return_value
-    mock_solver.decrypt.return_value = "hello"
-    mock_solver.calculate_ser.return_value = 0.0
-
-    mock_solver = mock_solver_class.return_value
-
     mock_solver.tokenizer.decode.return_value = "hello"
 
     test_sep_id = 100
@@ -54,11 +45,11 @@ def test_test_model_logic(
     }
     mock_loader.return_value = [fake_batch]
 
-    with patch("src.eval.config", create=True) as mock_config:
-        mock_config.max_len = 10
-        mock_config.save_path = str(model_path.parent.parent)
+    mock_config = mocker.patch("src.eval.config", create=True)
+    mock_config.max_len = 10
+    mock_config.save_path = str(model_path.parent.parent)
 
-        eval_module.test_model(test_dir, model_path=model_path)
+    eval_module.test_model(test_dir, model_path=model_path)
 
     expected_output = model_path.parent / f"eval_{model_path.stem}.jsonl"
     assert expected_output.exists()
