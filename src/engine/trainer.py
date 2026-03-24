@@ -132,7 +132,7 @@ class MambaTrainer:
         self,
         val_loss: float,
         is_best: bool,
-        suffix: str = None,
+        suffix: str | None = None,
     ) -> None:
         """Save a model checkpoint.
 
