@@ -254,11 +254,8 @@ class MambaTrainer:
 
         """
         self.model.train()
-        total_loss = 0
-        batches_processed = 0
+        total_loss, batches_processed = 0, 0
         resume_step = getattr(self, "resume_step", 0)
-
-        save_every_steps = self.config.save_step
 
         loop = tqdm(
             self.train_loader,
@@ -270,53 +267,16 @@ class MambaTrainer:
             if i < resume_step:
                 continue
 
-            global_step = (self.current_epoch * len(self.train_loader)) + i
+            loss_value = self._execute_training_step(batch, i)
 
-            self.current_step = i
-            self.optimizer.zero_grad()
-
-            with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
-                loss = self._compute_batch_loss(batch)
-
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.optimizer.step()
-            self.scheduler.step(global_step)
-
-            if global_step < self.warmup_steps:
-                phase = "warmup"
-            elif global_step < self.decay_start_step:
-                phase = "stable"
-            else:
-                phase = "decay"
-
-            current_lr = self.optimizer.param_groups[0]["lr"]
-
-            total_loss += loss.item()
+            total_loss += loss_value
             batches_processed += 1
-            current_step_loss = loss.item()
-            loop.set_postfix({
-                "loss": f"{loss.item():.3f}",
-                "lr": f"{current_lr:.2e}",
-                "phase": phase,
-            })
+
+            self._update_training_ui(loop, i, loss_value)
 
             step = i + 1
-            if step % save_every_steps == 0:
-                prev_step = step - save_every_steps
-                if prev_step > 0:
-                    ckpt_name = f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
-                    prev_checkpoint = self.exp_dir / ckpt_name
-                    if prev_checkpoint.exists():
-                        prev_checkpoint.unlink()
-                        logger.info(f"Removed old checkpoint: {prev_checkpoint.name}")
-
-                logger.info(f"\nStep {step}: Saving intermediate checkpoint...")
-                self._save_checkpoint(
-                    val_loss=current_step_loss,
-                    is_best=False,
-                    suffix=f"step_{step}",
-                )
+            if step % self.config.save_step == 0:
+                self._handle_intermediate_checkpoint(step, loss_value)
 
         self.resume_step = 0
         return total_loss / max(1, batches_processed)
@@ -380,6 +340,85 @@ class MambaTrainer:
             shift_labels.view(-1),
         )
         return loss
+
+    def _execute_training_step(
+        self,
+        batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor],
+        step_idx: int,
+    ) -> float:
+        """Execute a single pass for a training batch.
+
+        Args:
+            batch: A batch of data containing "input_ids" and "labels".
+            step_idx: The current iteration index within the current epoch.
+
+        Returns:
+            float: The scalar loss value for the current batch.
+
+        """
+        global_step = (self.current_epoch * len(self.train_loader)) + step_idx
+        self.current_step = step_idx
+
+        self.optimizer.zero_grad()
+
+        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+            loss = self._compute_batch_loss(batch)
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        self.optimizer.step()
+        self.scheduler.step(global_step)
+
+        return loss.item()
+
+    def _update_training_ui(self, loop: tqdm, step_idx: int, loss: float) -> None:
+        """Calculate the current training phase and updates the progress bar.
+
+        Args:
+            loop: The active tqdm progress bar instance for the training epoch.
+            step_idx: The current iteration index within the current epoch.
+            loss: The scalar loss value from the most recent training step to display.
+
+        """
+        global_step = (self.current_epoch * len(self.train_loader)) + step_idx
+
+        if global_step < self.warmup_steps:
+            phase = "warmup"
+        elif global_step < self.decay_start_step:
+            phase = "stable"
+        else:
+            phase = "decay"
+
+        current_lr = self.optimizer.param_groups[0]["lr"]
+
+        loop.set_postfix({
+            "loss": f"{loss:.3f}",
+            "lr": f"{current_lr:.2e}",
+            "phase": phase,
+        })
+
+    def _handle_intermediate_checkpoint(self, step: int, loss: float) -> None:
+        """Manage the 'sliding window' of checkpoints to save disk space.
+
+        Args:
+            step: The current iteration count (1-indexed) within the epoch.
+            loss: The training loss at the current step, used for checkpoint metadata.
+
+        """
+        prev_step = step - self.config.save_step
+        if prev_step > 0:
+            ckpt_name = f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
+            prev_checkpoint = self.exp_dir / ckpt_name
+            if prev_checkpoint.exists():
+                prev_checkpoint.unlink()
+                logger.info(f"Cleanup: Removed {prev_checkpoint.name}")
+
+        logger.info(f"Step {step}: Saving intermediate checkpoint...")
+        self._save_checkpoint(
+            val_loss=loss,
+            is_best=False,
+            suffix=f"step_{step}",
+        )
 
     def count_parameters(self, model: nn.Module) -> tuple[int, int]:
         """Count parameters for model."""
