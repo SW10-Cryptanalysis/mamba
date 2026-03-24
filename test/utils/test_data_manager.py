@@ -19,43 +19,6 @@ def data_dir(tmp_path):
 
     return tmp_path
 
-def test_scan_directory(data_dir):
-    """Ensure scanner finds both direct JSONs and those inside ZIPs."""
-    results = DataManager.scan_directory(data_dir)
-
-    # Should find sample1.json (None) and archive.zip (inner_sample.json)
-    assert len(results) == 2
-
-    # Check if internal_name logic is correct
-    extensions = [r[1] for r in results]
-    assert None in extensions
-    assert "inner_sample.json" in extensions
-
-def test_load_sample_plain(data_dir):
-    """Test loading a standard JSON file."""
-    path = str(data_dir / "sample1.json")
-    data = DataManager.load_sample(path)
-    assert data["plaintext"] == "abc"
-    assert "1 2 30" in data["ciphertext"]
-
-def test_load_sample_zip(data_dir):
-    """Test loading a JSON file from inside a ZIP."""
-    path = str(data_dir / "archive.zip")
-    data = DataManager.load_sample(path, internal_name="inner_sample.json")
-    assert data["plaintext"] == "xyz"
-    assert data["ciphertext"] == [5, 10, 100]
-
-def test_get_max_stats(data_dir):
-    """Verify parallel stats calculation across different file types."""
-    file_paths = DataManager.scan_directory(data_dir)
-
-    # File 1: "1 2 30" -> len 3, max 30
-    # File 2: [5, 10, 100] -> len 3, max 100
-    max_len, max_sym = DataManager.get_max_stats(file_paths)
-
-    assert max_len == 3
-    assert max_sym == 100
-
 def test_get_latest_checkpoint(tmp_path):
     """Verify finding the most recent checkpoint by mtime."""
     # Setup two experiment folders

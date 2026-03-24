@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from src.config import Config
 from src.utils.data_manager import DataManager
-from src.data.dataset import CipherDataset, PretokenizedCipherDataset
+from src.data.dataset import PretokenizedCipherDataset
 from src.engine.solver import CipherSolver
 from src.utils.logging import get_logger
 logger = get_logger("eval.py")
@@ -106,21 +106,14 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
     solver.load_checkpoint(model_path)
 
     test_dir = Path(test_dir).resolve()
-    is_arrow = (
-        (test_dir / "dataset_info.json").exists()
-        or any(test_dir.glob("*.arrow"))
-    )
-
-    if is_arrow:
-        test_dataset = PretokenizedCipherDataset(test_dir, config.max_len, config)
-    else:
-        test_files = DataManager.scan_directory(test_dir)
-        test_dataset = CipherDataset(
-            test_files,
-            config.max_len,
-            solver.tokenizer,
-            "eval",
+    if not (test_dir / "dataset_info.json").exists():
+        raise FileNotFoundError(
+            f"Arrow dataset not found at {test_dir}. "
+            "Ensure the data has been pre-tokenized into Arrow format.",
         )
+
+    logger.info(f"Loading Arrow dataset from {test_dir}")
+    test_dataset = PretokenizedCipherDataset(test_dir, config.max_len, config)
 
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     output_filename = model_dir / f"eval_{model_path.stem}.jsonl"

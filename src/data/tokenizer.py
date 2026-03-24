@@ -30,7 +30,7 @@ class CipherTokenizer:
 
         self.sep_token_id = config.unique_homophones + 1
         self.space_token_id = config.unique_homophones + 2
-        self.eos_token_id = self.config.unique_homophones + 4
+        self.eos_token_id = config.unique_homophones + 4
         self.char_offset = config.unique_homophones + 5
 
         self.char_to_id = {" ": self.space_token_id}
