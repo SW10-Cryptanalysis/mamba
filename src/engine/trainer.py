@@ -42,7 +42,6 @@ class MambaTrainer:
         val_loader: DataLoader,
         config: Config,
         run_type: str = "normal",
-        exp_dir: Path = None,
         device: str = "cuda",
     ) -> None:
         """Initialize the trainer with model, data, and experimental settings.
