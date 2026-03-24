@@ -41,7 +41,6 @@ class MambaTrainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         config: Config,
-        save_path: Path,
         run_type: str = "normal",
         exp_dir: Path = None,
         device: str = "cuda",
@@ -53,7 +52,6 @@ class MambaTrainer:
             train_loader: DataLoader providing training samples.
             val_loader: DataLoader providing validation samples.
             config: Config instance containing training hyperparameters.
-            save_path: Path where experiment folders will be created.
             run_type: Normal or spaced training,
             exp_dir: Optional path to an existing experiment directory
                 (used for resuming).
@@ -64,7 +62,6 @@ class MambaTrainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
-        self.save_path = save_path
         self.run_type = run_type
         self.device = device
         self.resume_step = 0
@@ -74,7 +71,7 @@ class MambaTrainer:
             self.timestamp = exp_dir.name.replace("exp_", "")
         else:
             self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
-            self.exp_dir = self.save_path / f"exp_{self.run_type}_{self.timestamp}"
+            self.exp_dir = config.save_path / f"exp_{self.run_type}_{self.timestamp}"
             self.exp_dir.mkdir(parents=True, exist_ok=True)
             self._save_config()
 

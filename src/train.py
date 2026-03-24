@@ -137,7 +137,6 @@ def train_model(
         train_loader=train_loader,
         val_loader=val_loader,
         config=config,
-        save_path=Path(config.save_path),
         run_type=run_type,
         exp_dir=target_exp_dir,
         device=device,
