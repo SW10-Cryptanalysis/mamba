@@ -24,14 +24,6 @@ def test_initialization_offsets(tokenizer):
     assert tokenizer.id_to_char[tokenizer.char_offset] == "a"
     assert tokenizer.id_to_char[tokenizer.space_token_id] == " "
 
-def test_encode_shifting(tokenizer):
-    """Verify plaintext is shifted correctly based on the tokenizer's char_offset."""
-    text = "abc"
-    encoded = tokenizer.encode(text)
-    # Dynamically expect based on whatever char_offset is
-    expected = [tokenizer.char_offset, tokenizer.char_offset + 1, tokenizer.char_offset + 2]
-    assert encoded == expected
-
 def test_decode_filtering(tokenizer):
     """Verify decoding ignores PAD and SEP but KEEPS spaces."""
     ids = [
@@ -42,13 +34,6 @@ def test_decode_filtering(tokenizer):
     ]
     decoded = tokenizer.decode(ids)
     assert decoded == "ab"
-
-def test_round_trip(tokenizer):
-    """Ensure encoding then decoding returns the original string."""
-    original = "hello mamba"
-    encoded = tokenizer.encode(original)
-    decoded = tokenizer.decode(encoded)
-    assert decoded == original.lower()
 
 def test_vocab_size_calculation(tokenizer):
     """Verify the property returns the correct total size dynamically."""

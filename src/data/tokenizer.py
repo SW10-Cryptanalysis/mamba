@@ -42,39 +42,6 @@ class CipherTokenizer:
             self.char_to_id[char] = token_id
             self.id_to_char[token_id] = char
 
-    def pad_sequence(self, ids: list[int], max_len: int) -> torch.Tensor:
-        """Handle truncation and padding, returning a LongTensor.
-
-        Args:
-            ids: List of integer token IDs.
-            max_len: Desired sequence length.
-
-        Returns:
-            A padded or truncated torch.Tensor of dtype long.
-
-        """
-        if len(ids) > max_len:
-            ids = ids[:max_len]
-        else:
-            ids = ids + [self.pad_token_id] * (max_len - len(ids))
-        return torch.tensor(ids, dtype=torch.long)
-
-    def encode(self, text: str) -> list[int]:
-        """Convert plaintext string to a list of integer IDs.
-
-        Args:
-            text: The plaintext string to encode.
-
-        Returns:
-            List of integer IDs shifted by the character offset.
-
-        """
-        return [
-            self.char_to_id[c]
-            for c in text.lower()
-            if c in self.char_to_id
-        ]
-
     def decode(self, ids: list[int] | torch.Tensor) -> str:
         """Convert token IDs back to a string, filtering out special control tokens.
 
