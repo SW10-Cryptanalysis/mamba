@@ -23,13 +23,13 @@ class Config:
 		factor (float, optional): The factor for early stopping. Defaults to 0.5.
 		pct_start (float): Percentage of training for LR warmup. Defaults to 0.1.
 		save_path (Path): Directory where model outputs and logs are stored.
-        data_dir (Path): Base directory for all cipher-related data.
-        tok_train_normal (Path): Path to normal pre-tokenized training data.
-        tok_valid_normal (Path): Path to normal pre-tokenized validation data.
-        tok_test_normal (Path): Path to normal pre-tokenized test data.
-        tok_train_spaced (Path): Path to spaced pre-tokenized training data.
-        tok_valid_spaced (Path): Path to spaced pre-tokenized validation data.
-        tok_test_spaced (Path): Path to spaced pre-tokenized test data.
+		data_dir (Path): Base directory for all cipher-related data.
+		tok_train_normal (Path): Path to normal pre-tokenized training data.
+		tok_valid_normal (Path): Path to normal pre-tokenized validation data.
+		tok_test_normal (Path): Path to normal pre-tokenized test data.
+		tok_train_spaced (Path): Path to spaced pre-tokenized training data.
+		tok_valid_spaced (Path): Path to spaced pre-tokenized validation data.
+		tok_test_spaced (Path): Path to spaced pre-tokenized test data.
 		homophone_file (str, optional): The name of the homophone file.
 			Defaults to "metadata.json".
 		plain_vocab_size (int, optional): The size of the plain vocabulary.
@@ -71,3 +71,20 @@ class Config:
 	unique_homophones: int = 2503
 	max_len: int = TOTAL_SEQ
 	buffer: int = 50
+	pad_token_id = 0
+
+	sep_token_id = unique_homophones + 1
+	space_token_id = unique_homophones + 2
+	bos_token_id = unique_homophones + 3
+	eos_token_id = unique_homophones + 4
+	char_offset = unique_homophones + 5
+
+	@property
+	def vocab_size(self) -> int:
+		"""Calculate the total vocabulary size including offsets and buffer.
+
+		Returns:
+			The total integer size of the vocabulary.
+
+		"""
+		return self.char_offset + self.plain_vocab_size + self.buffer

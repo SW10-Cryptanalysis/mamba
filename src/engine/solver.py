@@ -98,7 +98,8 @@ class CipherSolver:
 
         """
         if self.model is None:
-            raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
+            logger.error("Model not loaded. Call load_checkpoint() first.")
+            return
 
         input_ids = self._prepare_inference_input(input_ids)
 
@@ -107,7 +108,12 @@ class CipherSolver:
             max_batch_size=1,
         )
 
-        generated_tokens = self._generate_autoregressive(input_ids, inference_params)
+        generated_tokens = self._generate_autoregressive(
+            model=self.model,
+            eos_token_id=self.config.eos_token_id,
+            inference_params=inference_params,
+            input_ids=input_ids
+        )
 
         return self.tokenizer.decode(generated_tokens)
 
@@ -147,8 +153,10 @@ class CipherSolver:
         sep_tensor = torch.tensor([[sep_id]], device=self.device)
         return torch.cat([input_ids, sep_tensor], dim=1)
 
+    @staticmethod
     def _generate_autoregressive(
-        self,
+        model: MambaModel,
+        eos_token_id: int,
         input_ids: torch.Tensor,
         inference_params: InferenceParams,
     ) -> list[int]:
@@ -165,7 +173,7 @@ class CipherSolver:
                 plaintext.
 
         """
-        logits = self.model(input_ids, inference_params=inference_params)
+        logits = model(input_ids, inference_params=inference_params)
         next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
 
         generated_tokens = []
@@ -173,11 +181,11 @@ class CipherSolver:
 
         for _ in range(target_len):
             token_id = next_token.item()
-            if token_id == self.tokenizer.eos_token_id:
+            if token_id == eos_token_id:
                 break
 
             generated_tokens.append(token_id)
-            logits = self.model(next_token, inference_params=inference_params)
+            logits = model(next_token, inference_params=inference_params)
             next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
 
         return generated_tokens
