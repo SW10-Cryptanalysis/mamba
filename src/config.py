@@ -206,7 +206,7 @@ class Config:
     @property
     def tokenized_dir(self) -> Path:
         """Dynamic path based on whether we use spaces or not."""
-        suffix = "spaced" if self.use_spaces else "normal"
+        suffix = "spaces" if self.use_spaces else "normal"
         return self.data_dir / f"tokenized_{suffix}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:

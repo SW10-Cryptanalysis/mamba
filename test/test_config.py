@@ -43,7 +43,7 @@ class FailureTestCase:
         SuccessTestCase(
             use_spaces=True,
             mock_json='{"max_symbol_id": 2503}',
-            expected_suffix="spaced",
+            expected_suffix="spaces",
             expected_unique=2503,
             expected_vocab_size=2584,
             expected_sep_token_id=2504,
