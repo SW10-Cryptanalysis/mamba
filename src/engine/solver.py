@@ -2,7 +2,7 @@ from typing import Any
 import torch
 from pathlib import Path
 from src.models.mamba import MambaModel
-from mamba_ssm.utils.generation import InferenceParams
+from mamba_ssm.utils.generation import InferenceParams # type: ignore
 from src.config import Config
 from src.utils.logging import get_logger
 logger = get_logger("engine/solver.py")

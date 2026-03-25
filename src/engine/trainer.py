@@ -11,7 +11,9 @@ from pathlib import Path
 from datetime import datetime
 from src.config import Config
 from src.utils.logging import get_logger
+
 logger = get_logger("engine/trainer.py")
+
 
 class MambaTrainer:
     """Trainer class for Mamba-based cipher models.
@@ -95,7 +97,10 @@ class MambaTrainer:
         """Calculate the LR multiplier for Warmup-Stable-Decay.
 
         Args:
-            current_step: How many steps of training have passed.
+            current_step (int): How many steps of training have passed.
+
+        Returns:
+            float: The current learning rate multiplier.
 
         """
         if current_step < self.warmup_steps:
@@ -133,9 +138,10 @@ class MambaTrainer:
         """Save a model checkpoint.
 
         Args:
-            val_loss: Current loss.
-            is_best: If true, copies to best.pth.
-            suffix: Optional string (e.g., 'step_5000') for intra-epoch saves.
+            val_loss (float): Current loss.
+            is_best (bool): If true, copies to best.pth.
+            suffix (str, optional): Optional string (e.g., 'step_5000') for
+                intra-epoch saves.
 
         """
         state = {
@@ -173,10 +179,10 @@ class MambaTrainer:
         """Restore the trainer state from a saved checkpoint file.
 
         Args:
-            checkpoint_path: The filesystem path to the .pth checkpoint file.
+            checkpoint_path (Path): The filesystem path to the .pth checkpoint file.
 
         Returns:
-            The MambaTrainer instance (self).
+            MambaTrainer: The MambaTrainer instance (self).
 
         """
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -201,7 +207,7 @@ class MambaTrainer:
         """Execute the main training loop for a specified number of epochs.
 
         Args:
-            epochs: The total number of epochs to train for.
+            epochs (int): The total number of epochs to train for.
 
         """
         start_epoch = self.current_epoch
@@ -291,7 +297,7 @@ class MambaTrainer:
 
         with torch.no_grad():
             for batch in loop:
-                with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+                with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):  # type: ignore
                     loss = self._compute_batch_loss(batch)
                 total_loss += loss.item()
                 loop.set_postfix(loss=loss.item())
@@ -305,7 +311,7 @@ class MambaTrainer:
         """Compute the loss for a single batch.
 
         Args:
-            batch: A batch of data, either as a dictionary containing "input_ids"
+            batch (dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor]):
                 and "labels", or a tuple/list in the form (input_ids, labels).
 
         Returns:
@@ -341,8 +347,9 @@ class MambaTrainer:
         """Execute a single pass for a training batch.
 
         Args:
-            batch: A batch of data containing "input_ids" and "labels".
-            step_idx: The current iteration index within the current epoch.
+            batch (dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor]):
+                A batch of data containing "input_ids" and "labels".
+            step_idx (int): The current iteration index within the current epoch.
 
         Returns:
             float: The scalar loss value for the current batch.
@@ -353,7 +360,7 @@ class MambaTrainer:
 
         self.optimizer.zero_grad()
 
-        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
+        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):  # type: ignore
             loss = self._compute_batch_loss(batch)
 
         loss.backward()
@@ -367,9 +374,10 @@ class MambaTrainer:
         """Calculate the current training phase and updates the progress bar.
 
         Args:
-            loop: The active tqdm progress bar instance for the training epoch.
-            step_idx: The current iteration index within the current epoch.
-            loss: The scalar loss value from the most recent training step to display.
+            loop (tqdm): The active tqdm progress bar instance for the training epoch.
+            step_idx (int): The current iteration index within the current epoch.
+            loss (float): The scalar loss value from the most recent training step to
+                display.
 
         """
         global_step = (self.current_epoch * len(self.train_loader)) + step_idx
@@ -383,18 +391,21 @@ class MambaTrainer:
 
         current_lr = self.optimizer.param_groups[0]["lr"]
 
-        loop.set_postfix({
-            "loss": f"{loss:.3f}",
-            "lr": f"{current_lr:.2e}",
-            "phase": phase,
-        })
+        loop.set_postfix(
+            {
+                "loss": f"{loss:.3f}",
+                "lr": f"{current_lr:.2e}",
+                "phase": phase,
+            },
+        )
 
     def _handle_intermediate_checkpoint(self, step: int, loss: float) -> None:
         """Manage the 'sliding window' of checkpoints to save disk space.
 
         Args:
-            step: The current iteration count (1-indexed) within the epoch.
-            loss: The training loss at the current step, used for checkpoint metadata.
+            step (int): The current iteration count (1-indexed) within the epoch.
+            loss (float): The training loss at the current step, used for checkpoint
+                metadata.
 
         """
         prev_step = step - self.config.save_step

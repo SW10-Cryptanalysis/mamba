@@ -18,5 +18,5 @@ modules_to_mock = [
 for mod in modules_to_mock:
     sys.modules[mod] = MagicMock()
 
-sys.modules["mamba_ssm.ops.triton.layer_norm"].RMSNorm = MagicMock
-sys.modules["mamba_ssm"].Mamba2 = MagicMock
+sys.modules["mamba_ssm.ops.triton.layer_norm"].RMSNorm = MagicMock # type: ignore
+sys.modules["mamba_ssm"].Mamba2 = MagicMock # type: ignore
