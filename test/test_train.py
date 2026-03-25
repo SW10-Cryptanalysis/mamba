@@ -9,7 +9,6 @@ def mock_exp_dir(tmp_path):
     exp_dir = tmp_path / "exp_0101_1200_2024"
     exp_dir.mkdir()
     config_file = exp_dir / "config.json"
-    # Create a config with a specific value to see if it overrides
     config_file.write_text('{"learning_rate": 0.0099, "batch_size": 123}')
 
     checkpoint = exp_dir / "latest.pth"
@@ -19,13 +18,12 @@ def mock_exp_dir(tmp_path):
 def test_resolve_config_manual_path(mock_exp_dir):
     """Verify that providing a manual path loads the corresponding config."""
     config = Config()
-    config.learning_rate = 0.001 # Default
+    config.learning_rate = 0.001
 
     resume_path, target_dir = resolve_config(str(mock_exp_dir), config, "normal")
 
     assert resume_path == mock_exp_dir
     assert target_dir == mock_exp_dir.parent
-    # Check if the override worked
     assert config.learning_rate == 0.0099
     assert config.batch_size == 123
 
@@ -43,17 +41,13 @@ def test_resolve_config_auto(mock_get_latest, mock_exp_dir):
 @patch("src.train.MambaTrainer")
 @patch("src.train.MambaModel")
 @patch("src.train.get_loaders")
-@patch("src.train.CipherTokenizer")
-def test_train_model_flow(mock_tok, mock_loaders, mock_model, mock_trainer_class):
+def test_train_model_flow(mock_loaders, mock_model, mock_trainer_class):
     """Ensure the full pipeline orchestrates components in the right order."""
 
-    # Setup mocks
-    mock_loaders.return_value = (MagicMock(), MagicMock()) # (train, val)
+    mock_loaders.return_value = (MagicMock(), MagicMock())
     mock_trainer_instance = mock_trainer_class.return_value
 
-    # Run the function
     train_model(resume_arg=None, device="cpu")
 
-    # Assertions: Did it move to CUDA? Did it start training?
     mock_model.return_value.to.assert_called_with("cpu")
     mock_trainer_instance.train.assert_called_once()

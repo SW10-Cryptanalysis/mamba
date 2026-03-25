@@ -126,9 +126,9 @@ def test_model(test_dir: Path, model_path: Path | None = None) -> None:
                 input_ids = batch["input_ids"].squeeze(0).tolist()
                 raw_labels = batch["labels"].squeeze(0).tolist()
                 label_ids = [tid for tid in raw_labels if tid != -100]
-                current_ground_truth = solver.tokenizer.decode(label_ids)
+                current_ground_truth = solver.decode(label_ids)
 
-                sep_id = solver.tokenizer.sep_token_id
+                sep_id = config.sep_token_id
                 if sep_id not in input_ids:
                     continue
 

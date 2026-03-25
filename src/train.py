@@ -9,7 +9,6 @@ from src.utils.logging import get_logger
 from src.config import Config
 from src.utils.data_manager import DataManager
 from src.data.dataset import PretokenizedCipherDataset
-from src.data.tokenizer import CipherTokenizer
 from src.engine.trainer import MambaTrainer
 
 logger = get_logger("train.py")
@@ -49,10 +48,7 @@ def resolve_config(
 
     return resume_path, target_exp_dir
 
-def get_loaders(
-    config: Config,
-    tokenizer: CipherTokenizer,
-) -> tuple[DataLoader, DataLoader]:
+def get_loaders(config: Config) -> tuple[DataLoader, DataLoader]:
     """Initialize training and validation data loaders with format detection."""
     train_path = Path(config.train_data_dir).resolve()
     valid_path = Path(config.valid_data_dir).resolve()
@@ -77,7 +73,7 @@ def get_loaders(
 
     collate_fn = partial(
         DataManager.safe_pad_collate,
-        pad_token_id=tokenizer.pad_token_id,
+        pad_token_id=config.pad_token_id,
         ignore_index=-100,
     )
 
@@ -123,12 +119,11 @@ def train_model(
     run_type = "spaced" if use_spaces else "normal"
     resume_path, target_exp_dir = resolve_config(resume_arg, config, run_type)
 
-    tokenizer = CipherTokenizer(config)
-    train_loader, val_loader = get_loaders(config, tokenizer)
+    train_loader, val_loader = get_loaders(config)
 
     model = MambaModel(
-        vocab_size=tokenizer.vocab_size,
-        char_offset=tokenizer.char_offset,
+        vocab_size=config.vocab_size,
+        char_offset=config.char_offset,
         config=config,
     ).to(device)
 

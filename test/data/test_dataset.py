@@ -2,7 +2,6 @@ import pytest
 import torch
 from unittest.mock import patch
 from src.data.dataset import PretokenizedCipherDataset
-from src.data.tokenizer import CipherTokenizer
 from src.config import Config
 from pathlib import Path
 
@@ -13,10 +12,6 @@ def config():
     conf.unique_homophones = 100
     conf.max_len = 10
     return conf
-
-@pytest.fixture
-def tokenizer(config):
-    return CipherTokenizer(config)
 
 @pytest.fixture
 def mock_arrow_data():

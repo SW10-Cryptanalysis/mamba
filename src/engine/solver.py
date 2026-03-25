@@ -3,7 +3,6 @@ import torch
 from pathlib import Path
 from src.models.mamba import MambaModel
 from mamba_ssm.utils.generation import InferenceParams
-from src.data.tokenizer import CipherTokenizer
 from src.config import Config
 from src.utils.logging import get_logger
 logger = get_logger("engine/solver.py")
@@ -14,13 +13,14 @@ class CipherSolver:
     Encapsulates model loading, inference, and decoding.
 
     Attributes:
-        config (Config): Configuration object containing model and tokenizer settings.
+        config (Config): Configuration object containing model.
         device (str): The device (cuda/cpu) where the model is loaded.
-        tokenizer (CipherTokenizer): Tokenizer instance for handling character mapping.
         model (MambaModel | None): The underlying Mamba neural network,
             initialized during load_checkpoint.
         metadata (dict[str, Any]): Stores information about the loaded checkpoint,
             such as file path and validation loss.
+        char_to_id (dict[str, int]): Mapping from characters to their integer IDs.
+        id_to_char (dict[int, str]): Mapping from integer IDs back to characters.
 
     """
 
@@ -28,15 +28,23 @@ class CipherSolver:
         """Initialize the solver with configuration and device.
 
         Args:
-            config: Configuration object for model and tokenizer parameters.
+            config: Configuration object for model.
             device: Hardware device to run inference on (e.g., 'cuda' or 'cpu').
 
         """
         self.config = config
         self.device = device
-        self.tokenizer = CipherTokenizer(config)
         self.model: MambaModel | None = None
         self.metadata: dict[str, Any] = {}
+
+        self.char_to_id = {" ": config.space_token_id}
+        self.id_to_char = {config.space_token_id: " "}
+
+        for i in range(26):
+            char = chr(ord("a") + i)
+            token_id = config.char_offset + i
+            self.char_to_id[char] = token_id
+            self.id_to_char[token_id] = char
 
     def load_checkpoint(self, checkpoint_path: Path) -> "CipherSolver":
         """Model instantiation and weight loading from a .pth file.
@@ -89,7 +97,7 @@ class CipherSolver:
                 generation begins.
 
         Returns:
-            str: The decrypted plaintext string, decoded via the tokenizer.
+            str: The decrypted plaintext string.
 
         Note:
             The method automatically appends a SEP token if one is not present in
@@ -115,7 +123,7 @@ class CipherSolver:
             input_ids=input_ids,
         )
 
-        return self.tokenizer.decode(generated_tokens)
+        return self.decode(generated_tokens)
 
     def _prepare_inference_input(
         self,
@@ -143,7 +151,7 @@ class CipherSolver:
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
 
-        sep_id = self.tokenizer.sep_token_id
+        sep_id = self.config.sep_token_id
         sep_mask = (input_ids[0] == sep_id).nonzero(as_tuple=True)[0]
 
         if len(sep_mask) > 0:
@@ -191,6 +199,34 @@ class CipherSolver:
             next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
 
         return generated_tokens
+
+    def decode(self, ids: list[int] | torch.Tensor) -> str:
+        """Convert token IDs back to a string, filtering out special control tokens.
+
+        Args:
+            ids: A list of integer IDs or a torch.Tensor to be decoded.
+                Handles both 1D and multi-dimensional tensors by flattening.
+
+        Returns:
+            str: The decoded string containing only mapped characters,
+                excluding PAD, SEP, and EOS tokens.
+
+        """
+        if isinstance(ids, torch.Tensor):
+            ids = ids.view(-1).tolist()
+
+        special_tokens = {
+            self.config.pad_token_id,
+            self.config.sep_token_id,
+            self.config.eos_token_id,
+        }
+
+        return "".join([
+            self.id_to_char[i]
+            for i in ids
+            if i in self.id_to_char and i not in special_tokens
+        ])
+
 
     def calculate_ser(self, pred: str, target: str) -> float:
         """Calculate Symbol Error Rate (SER).
