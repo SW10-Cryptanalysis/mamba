@@ -1,5 +1,5 @@
 import json
-
+from pathlib import Path
 import pytest
 import torch
 import torch.nn as nn
@@ -21,6 +21,7 @@ class SimpleLinearModel(nn.Module):
 @pytest.fixture
 def cpu_trainer_setup(tmp_path):
     config = Config()
+    config.save_path = Path(tmp_path)
     config.learning_rate = 0.001
     vocab_size = 200
     char_offset = 100
@@ -28,10 +29,6 @@ def cpu_trainer_setup(tmp_path):
     cipher = torch.randint(0, 100, (4, 5))
     plain = torch.randint(100, 200, (4, 5))
     loader = DataLoader(TensorDataset(cipher, plain), batch_size=2)
-
-    save_path = tmp_path / "train_out"
-    save_path.mkdir()
-
     model = SimpleLinearModel(vocab_size, char_offset)
 
     trainer = MambaTrainer(
