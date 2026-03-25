@@ -65,14 +65,10 @@ class MambaTrainer:
         self.device = device
         self.resume_step = 0
 
-        if exp_dir:
-            self.exp_dir = exp_dir
-            self.timestamp = exp_dir.name.replace("exp_", "")
-        else:
-            self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
-            self.exp_dir = config.save_path / f"exp_{self.run_type}_{self.timestamp}"
-            self.exp_dir.mkdir(parents=True, exist_ok=True)
-            self._save_config()
+        self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
+        self.exp_dir = config.save_path / f"exp_{self.run_type}_{self.timestamp}"
+        self.exp_dir.mkdir(parents=True, exist_ok=True)
+        self._save_config()
 
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
