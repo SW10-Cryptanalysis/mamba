@@ -12,7 +12,7 @@ from src.engine.solver import CipherSolver
 from src.utils.logging import get_logger
 logger = get_logger("eval.py")
 
-def _find_model_path(config_save_path: str) -> Path | None:
+def _find_model_path(config_save_path: Path) -> Path | None:
     """Find the most recent best.pth or latest .pth file.
 
     This function searches recursively through the save directory. It prioritizes
