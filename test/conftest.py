@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 modules_to_mock = [
     "mamba_ssm",
+    "mamba_ssm.utils",
+    "mamba_ssm.utils.generation",
     "mamba_ssm.ops",
     "mamba_ssm.ops.triton",
     "mamba_ssm.ops.triton.layer_norm",

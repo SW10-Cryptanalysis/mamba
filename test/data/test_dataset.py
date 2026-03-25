@@ -1,67 +1,61 @@
 import pytest
 import torch
 from unittest.mock import patch
-from src.data.dataset import CipherDataset
+from src.data.dataset import PretokenizedCipherDataset
 from src.data.tokenizer import CipherTokenizer
 from src.config import Config
+from pathlib import Path
 
 @pytest.fixture
-def tokenizer():
-    """Instantiate a real CipherTokenizer with a test configuration."""
-    config = Config()
-    config.unique_homophones = 1
+def config():
+    """Test configuration."""
+    conf = Config()
+    conf.unique_homophones = 100
+    conf.max_len = 10
+    return conf
+
+@pytest.fixture
+def tokenizer(config):
     return CipherTokenizer(config)
 
 @pytest.fixture
-def sample_file_paths():
-    return [("fake/path/1.json", None), ("fake/archive.zip", "sample_1")]
+def mock_arrow_data():
+    """Creates a list of dicts simulating what Arrow returns."""
+    return [
+        {"input_ids": [1, 2, 3, 101, 106, 107], "labels": [1, 2, 3, 101, 106, 107]},
+        {"input_ids": [10, 20, 101, 110], "labels": [10, 20, 101, 110]},
+    ]
 
-def test_dataset_length(sample_file_paths, tokenizer):
-    """Verify that the dataset reports the correct number of samples."""
-    dataset = CipherDataset(sample_file_paths, max_seq_len=10, tokenizer=tokenizer)
+@patch("src.data.dataset.load_from_disk")
+def test_dataset_length(mock_load, config, mock_arrow_data):
+    """Verify that the dataset reports the correct number of samples from Arrow."""
+    mock_load.return_value = mock_arrow_data
+    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
+
     assert len(dataset) == 2
 
-@patch("src.utils.data_manager.DataManager.load_sample")
-def test_dataset_train_mode(mock_load, sample_file_paths, tokenizer):
-    """Verify that train mode returns (cipher_tensor, plain_tensor)."""
-    mock_load.return_value = {
-        "ciphertext": "1 2 3",
-        "plaintext": "abc"
-    }
+@patch("src.data.dataset.load_from_disk")
+def test_dataset_getitem_content(mock_load, config, mock_arrow_data):
+    """Verify __getitem__ returns variable-length tensors as expected."""
+    mock_load.return_value = mock_arrow_data
+    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
 
-    max_len = 5
-    dataset = CipherDataset(sample_file_paths, max_seq_len=max_len, tokenizer=tokenizer, mode="train")
-    cipher, plain = dataset[0]
+    batch = dataset[0]
+    input_ids = batch["input_ids"]
+    labels = batch["labels"]
 
-    assert torch.is_tensor(cipher)
-    assert cipher.shape[0] == max_len
-    assert cipher.tolist() == [1, 2, 3, 0, 0]
+    assert isinstance(input_ids, torch.Tensor)
+    assert input_ids.shape[0] == 6
+    assert input_ids.tolist() == [1, 2, 3, 101, 106, 107]
+    assert labels.tolist() == [1, 2, 3, 101, 106, 107]
 
-    assert torch.is_tensor(plain)
-    assert plain.shape[0] == max_len
+@patch("src.data.dataset.load_from_disk")
+def test_dataset_truncation(mock_load, config):
+    """Verify that sequences longer than max_seq_len are truncated."""
+    long_data = [{"input_ids": list(range(20)), "labels": list(range(20))}]
+    mock_load.return_value = long_data
+    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
 
-    expected_ids = tokenizer.encode("abc")
-    expected_padded = (expected_ids + [0] * max_len)[:max_len]
-
-    assert plain.tolist() == expected_padded
-
-@patch("src.utils.data_manager.DataManager.load_sample")
-def test_dataset_eval_mode_robust(mock_load, sample_file_paths, tokenizer):
-    """Verify eval mode returns correct types, handles None, and pads correctly."""
-    mock_load.return_value = {
-        "ciphertext": [10, 20],
-        "plaintext": "hello"
-    }
-
-    max_len = 4
-    dataset = CipherDataset(sample_file_paths, max_seq_len=max_len, tokenizer=tokenizer, mode="eval")
-    cipher_tensor, plain_str, metadata = dataset[0]
-
-    assert cipher_tensor.shape[0] == max_len
-    assert cipher_tensor.tolist() == [10, 20, 0, 0]
-
-    assert plain_str == "hello"
-
-    assert metadata["internal_name"] == ""
-    assert isinstance(metadata["path"], str)
-    assert metadata["path"] == sample_file_paths[0][0]
+    batch = dataset[0]
+    assert batch["input_ids"].shape[0] == 10
+    assert batch["labels"].shape[0] == 10

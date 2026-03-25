@@ -5,10 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "torch>=2.10.0",
+    "torch>=2.10.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "torch<2.3.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "tqdm>=4.67.3",
-    "numpy",
-	"easy-logging-formatter>=0.1.1",
+    "numpy; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "numpy<2.0.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "easy-logging-formatter>=0.1.1",
+    "datasets>=4.6.1",
 ]
 
 [project.optional-dependencies]
@@ -21,18 +24,22 @@ gpu = [
 dev = [
     "pytest>=9.0.2",
     "ruff>=0.15.1",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.0.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["test"]
+addopts = "-v --tb=short --cov=src --cov-report=term-missing"
 norecursedirs = ["train_data"]
 filterwarnings = [
-    "ignore:This process .* is multi-threaded, use of fork:DeprecationWarning"
+    "ignore:This process .* is multi-threaded, use of fork:DeprecationWarning",
+    "ignore:.*scheduler.step().*not necessary.*:UserWarning"
 ]
 
 [tool.uv]
-environments = ["sys_platform == 'linux'"]
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
 
 [tool.ruff]
 line-length = 88
@@ -62,4 +69,4 @@ ignore = [
 	"ERA001", # Found commented-out code
 ]
 [tool.ruff.format]
-indent-style = "tab"
+indent-style = "space"

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from mamba_ssm import Mamba2
 from mamba_ssm.ops.triton.layer_norm import RMSNorm
+from mamba_ssm.utils.generation import InferenceParams
 from src.config import Config
 
 class MambaModel(nn.Module):
@@ -45,19 +46,27 @@ class MambaModel(nn.Module):
                     d_state=config.d_state,
                     d_conv=config.d_conv,
                     expand=config.expand,
+                    layer_idx=i,
                 ),
             })
-            for _ in range(config.n_layers)
+            for i in range(config.n_layers)
         ])
 
         self.norm_f = RMSNorm(config.d_model)
         self.lm_head = nn.Linear(config.d_model, vocab_size, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        inference_params: InferenceParams = None,
+    ) -> torch.Tensor:
         """Perform a forward pass through the network.
 
         Args:
             x: Input tensor of token IDs with shape (batch_size, seq_len).
+            inference_params: Object containing state information
+                used for efficient incremental inference.
+                If None, a standard dense forward pass is performed.
 
         Returns:
             Logits tensor with shape (batch_size, seq_len, vocab_size).
@@ -67,7 +76,7 @@ class MambaModel(nn.Module):
         for layer in self.layers:
             residual = x
             x = layer["norm"](x)
-            x = layer["mixer"](x) + residual
+            x = layer["mixer"](x, inference_params=inference_params) + residual
 
         x = self.norm_f(x)
         return self.lm_head(x)

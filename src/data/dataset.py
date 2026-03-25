@@ -1,93 +1,84 @@
-from typing import Literal
+from pathlib import Path
 import torch
 from torch.utils.data import Dataset
-from ..utils.data_manager import DataManager
-from src.data.tokenizer import CipherTokenizer
+from datasets import load_from_disk
+from src.config import Config
 from src.utils.logging import get_logger
 logger = get_logger("data/dataset.py")
 
-class CipherDataset(Dataset):
-    """A unified Dataset for Cipher tasks.
+class PretokenizedCipherDataset(Dataset):
+    """A Dataset for handling pre-tokenized cipher sequences stored in Arrow format.
+
+    This dataset is designed for models that use a unified input sequence where the
+    ciphertext and plaintext are separated by a specific [SEP] token. It manages
+    the masking of labels to ensure the model only calculates loss on the
+    predicted plaintext tokens.
 
     Attributes:
-        file_paths (list[tuple[str, str | None]]): List of tuples containing the
-            filesystem path and an optional internal identifier for each sample.
+        dataset: The underlying Hugging Face/Arrow dataset loaded from disk.
         max_seq_len (int): The fixed length to which all sequences are padded
             or truncated.
-        tokenizer (CipherTokenizer): The tokenizer used to transform strings
-            into tensor indices.
-        mode (Literal["train", "eval"]): Determines the return structure of __getitem__.
+        sep_token_id (int): The unique token ID used to separate cipher
+            and plain text.
 
     """
 
     def __init__(
         self,
-        file_paths: list[tuple[str, str | None]],
+        directory_path: Path,
         max_seq_len: int,
-        tokenizer: CipherTokenizer,
-        mode: Literal["train", "eval"] = "train",
+        config: Config,
     ) -> None:
         """Initialize the dataset with file paths and configuration.
 
         Args:
-            file_paths: List of (path, internal_name) tuples.
-            max_seq_len: Maximum sequence length for padding/truncation.
-            tokenizer: The tokenizer for encoding/decoding.
-            mode: The operational mode. Must be one of 'train' or 'eval'.
-                Defaults to 'train'.
+            directory_path: Path to the directory containing the pre-tokenized
+                Arrow dataset files.
+            max_seq_len: The fixed sequence length for the model. Inputs will
+                be padded or truncated to this value.
+            config: Configuration object used to derive the separator token ID
+                based on the number of unique homophones.
 
         """
-        self.file_paths = file_paths
+        self.dataset = load_from_disk(str(directory_path))
         self.max_seq_len = max_seq_len
-        self.tokenizer = tokenizer
-        self.mode = mode
+        self.sep_token_id = config.unique_homophones + 1
 
     def __len__(self) -> int:
         """Return the total number of samples in the dataset."""
-        return len(self.file_paths)
+        return len(self.dataset)
 
-    def __getitem__(
-        self,
-        idx: int,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, str, dict]:
-        """Fetch a single sample from the dataset by index.
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        """Retrieve a sample, truncate to max_seq_len, reutrn raw tensors.
 
         Args:
             idx: The index of the sample to retrieve.
 
         Returns:
-            In 'train' mode:
-                tuple: (cipher_tensor, plain_tensor)
-            In 'eval' mode:
-                tuple: (cipher_tensor, original_plaintext, metadata)
-
-        Raises:
-            Exception: If there is an error loading the sample via DataManager.
+            dict: {
+                "input_ids": LongTensor of variable length <= max_seq_len,
+                "labels": LongTensor of variable length <= max_seq_len.
+            }
 
         """
-        path, internal_name = self.file_paths[idx]
+        item = self.dataset[idx]
+        input_ids = item["input_ids"]
+        labels = item["labels"]
 
-        try:
-            data = DataManager.load_sample(path, internal_name)
+        input_list = (
+            input_ids.tolist()
+            if isinstance(input_ids, torch.Tensor)
+            else list(input_ids)
+        )
 
-            ciphertext = data["ciphertext"]
-            if isinstance(ciphertext, str):
-                ciphertext = [int(x) for x in ciphertext.split()]
+        label_list = (
+            labels.tolist() if isinstance(labels, torch.Tensor) else list(labels)
+        )
 
-            cipher_tensor = self.tokenizer.pad_sequence(ciphertext, self.max_seq_len)
+        input_list = input_list[:self.max_seq_len]
+        label_list = label_list[:self.max_seq_len]
 
-            if self.mode == "eval":
-                metadata = {
-                    "path": str(path),
-                    "internal_name": internal_name if internal_name is not None else "",
-                }
-                return cipher_tensor, data["plaintext"], metadata
-
-            encoded_plain = self.tokenizer.encode(data["plaintext"])
-            plain_tensor = self.tokenizer.pad_sequence(encoded_plain, self.max_seq_len)
-
-            return cipher_tensor, plain_tensor
-
-        except Exception as e:
-            logger.error(f"Error loading index {idx}: {e}")
-            raise e
+        return {
+            "input_ids": torch.tensor(input_list, dtype=torch.long),
+            "labels": torch.tensor(label_list, dtype=torch.long),
+        }

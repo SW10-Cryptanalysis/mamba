@@ -2,6 +2,7 @@ from typing import Any
 import torch
 from pathlib import Path
 from src.models.mamba import MambaModel
+from mamba_ssm.utils.generation import InferenceParams
 from src.data.tokenizer import CipherTokenizer
 from src.config import Config
 from src.utils.logging import get_logger
@@ -78,39 +79,118 @@ class CipherSolver:
         return self
 
     @torch.no_grad()
-    def decrypt(self, ciphertext: list[int] | str) -> str:
-        """High-level API: Take raw ciphertext and return a human-readable string.
+    def decrypt(self, input_ids: str | list[int] | torch.Tensor) -> str:
+        """Perform autoregressive decryption of ciphertext using the Mamba model.
 
         Args:
-            ciphertext: A list of integers or a space-separated string of homophones.
+            input_ids: The sequence to decrypt. Can be a list of integer token IDs
+                or a torch.Tensor. If a unified sequence (Cipher + SEP
+                + Plain) is provided, tokens after the SEP are discarded before
+                generation begins.
 
         Returns:
-            The decrypted plaintext string truncated to match input length.
+            str: The decrypted plaintext string, decoded via the tokenizer.
 
-        Raises:
-            RuntimeError: If called before load_checkpoint().
+        Note:
+            The method automatically appends a SEP token if one is not present in
+            the input, signaling the model to begin the transition from cipher
+            processing to plaintext generation.
 
         """
         if self.model is None:
+            logger.error("Model not loaded. Call load_checkpoint() first.")
             raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
-        if isinstance(ciphertext, str):
-            ciphertext = [int(x) for x in ciphertext.split()]
+        input_ids = self._prepare_inference_input(input_ids)
 
-        logger.debug(f"Decrypting sequence of length {len(ciphertext)}")
-
-        input_tensor = (
-            self.tokenizer.pad_sequence(ciphertext, self.config.max_len)
-            .unsqueeze(0)
-            .to(self.device)
+        inference_params = InferenceParams(
+            max_seqlen=self.config.max_len,
+            max_batch_size=1,
         )
 
-        logits = self.model(input_tensor)
-        pred_indices = torch.argmax(logits, dim=-1).squeeze(0).tolist()
+        generated_tokens = self._generate_autoregressive(
+            model=self.model,
+            eos_token_id=self.config.eos_token_id,
+            inference_params=inference_params,
+            input_ids=input_ids,
+        )
 
-        full_decoded = self.tokenizer.decode(pred_indices)
+        return self.tokenizer.decode(generated_tokens)
 
-        return full_decoded[:len(ciphertext)]
+    def _prepare_inference_input(
+        self,
+        input_ids: str | list[int] | torch.Tensor,
+    ) -> torch.Tensor:
+        """Standardize input format and ensures it ends with exactly one SEP token.
+
+        Args:
+            input_ids: The raw input to be decrypted. Can be a space-separated
+                string of integers, a list of token IDs, or a torch.Tensor.
+                If a tensor is provided, it is coerced to shape [1, seq_len].
+
+        Returns:
+            torch.Tensor: A 2D long tensor of shape [1, adjusted_seq_len]
+                residing on the model's device, guaranteed to end with the
+                separator token ID.
+
+        """
+        if isinstance(input_ids, str):
+            input_ids = [int(x) for x in input_ids.split()]
+        if isinstance(input_ids, list):
+            input_ids = torch.tensor([input_ids], dtype=torch.long)
+
+        input_ids = input_ids.to(self.device)
+        if input_ids.dim() == 1:
+            input_ids = input_ids.unsqueeze(0)
+
+        sep_id = self.tokenizer.sep_token_id
+        sep_mask = (input_ids[0] == sep_id).nonzero(as_tuple=True)[0]
+
+        if len(sep_mask) > 0:
+            sep_idx = sep_mask[0]
+            return input_ids[:, :sep_idx + 1]
+
+        sep_tensor = torch.tensor([[sep_id]], device=self.device)
+        return torch.cat([input_ids, sep_tensor], dim=1)
+
+    @staticmethod
+    def _generate_autoregressive(
+        model: MambaModel,
+        eos_token_id: int,
+        input_ids: torch.Tensor,
+        inference_params: InferenceParams,
+    ) -> list[int]:
+        """Execute the Mamba autoregressive loop using provided inference parameters.
+
+        Args:
+            model: The MambaModel.
+            eos_token_id: The id of the EOS token.
+            input_ids: The pre-processed input tensor [1, seq_len] containing
+                the ciphertext and the separator token.
+            inference_params: A Mamba `InferenceParams` object that tracks
+                the internal SSM states across time steps for efficient generation.
+
+        Returns:
+            list[int]: A list of generated token IDs representing the decrypted
+                plaintext.
+
+        """
+        logits = model(input_ids, inference_params=inference_params)
+        next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+
+        generated_tokens = []
+        target_len = input_ids.size(1) - 2
+
+        for _ in range(target_len):
+            token_id = next_token.item()
+            if token_id == eos_token_id:
+                break
+
+            generated_tokens.append(token_id)
+            logits = model(next_token, inference_params=inference_params)
+            next_token = torch.argmax(logits[:, -1, :], dim=-1).view(1, 1)
+
+        return generated_tokens
 
     def calculate_ser(self, pred: str, target: str) -> float:
         """Calculate Symbol Error Rate (SER).
