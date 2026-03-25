@@ -99,7 +99,7 @@ class CipherSolver:
         """
         if self.model is None:
             logger.error("Model not loaded. Call load_checkpoint() first.")
-            return
+            raise RuntimeError("Model not loaded. Call load_checkpoint() first.")
 
         input_ids = self._prepare_inference_input(input_ids)
 
@@ -112,7 +112,7 @@ class CipherSolver:
             model=self.model,
             eos_token_id=self.config.eos_token_id,
             inference_params=inference_params,
-            input_ids=input_ids
+            input_ids=input_ids,
         )
 
         return self.tokenizer.decode(generated_tokens)
@@ -163,6 +163,8 @@ class CipherSolver:
         """Execute the Mamba autoregressive loop using provided inference parameters.
 
         Args:
+            model: The MambaModel.
+            eos_token_id: The id of the EOS token.
             input_ids: The pre-processed input tensor [1, seq_len] containing
                 the ciphertext and the separator token.
             inference_params: A Mamba `InferenceParams` object that tracks
