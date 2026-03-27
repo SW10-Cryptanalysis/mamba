@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import datetime
 from pathlib import Path
 import json
 from src.utils.logging import get_logger
@@ -168,7 +169,7 @@ class Config:
     )
     save_step: int = 5000
 
-    save_path: Path = Path(__file__).parent.parent / "outputs"
+    outputs_dir: Path = Path(__file__).parent.parent / "outputs"
     data_dir = Path(__file__).parent.parent.parent / "Ciphers"
     homophone_file: str = "metadata.json"
 
@@ -208,6 +209,13 @@ class Config:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaces" if self.use_spaces else "normal"
         return self.data_dir / f"tokenized_{suffix}"
+    
+    @property
+    def save_path(self) -> Path:
+        """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
+        mode = "spaces" if self.use_spaces else "normal"
+        timestamp = datetime.now().strftime("%d%m_%H%M%S_%Y")
+        return self.outputs_dir / f"{mode}_{timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:
         """Load the homophone metadata file and set the unique homophone count."""
