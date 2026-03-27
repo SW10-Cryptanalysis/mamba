@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-import datetime
+from datetime import datetime
 from pathlib import Path
 import json
 from src.utils.logging import get_logger

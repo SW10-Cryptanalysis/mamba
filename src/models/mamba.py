@@ -22,7 +22,6 @@ def get_model(config: Config) -> Mamba2ForCausalLM:
     config = Mamba2Config(
         **m_dict,
         torch_dtype=torch.bfloat16,
-        use_cache=False,
     )
 
     model = Mamba2ForCausalLM(config)
