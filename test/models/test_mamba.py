@@ -28,7 +28,7 @@ class TestMambaModel:
 
         mock_instance = MagicMock()
         mock_instance.num_parameters.return_value = 1000000
-        mock_instance.get_memory_footprint.return_value = 4000000 # 4MB
+        mock_instance.get_memory_footprint.return_value = 4000000
         mock_model_cls.return_value = mock_instance
 
         model = get_model(mock_config)

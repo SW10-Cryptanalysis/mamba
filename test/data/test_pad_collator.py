@@ -55,7 +55,7 @@ def test_empty_features(collator):
     assert output["input_ids"].shape == (0, 0)
     assert isinstance(output["input_ids"], torch.Tensor)
 
-def test_ignore_index_consistency(collator):
+def test_ignore_index_consistency():
     """Ensure labels use -100 for padding, even if pad_token_id is different."""
     custom_collator = PadCollator(pad_token_id=99)
     features = [{"input_ids": [1, 2], "labels": [1, 2]}]

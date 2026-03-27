@@ -41,7 +41,7 @@ class TestMambaTrainer:
         assert trainer_with_mocks.save_path.exists()
 
     @patch("src.engine.trainer.get_last_checkpoint")
-    def test_resolve_resume_path_auto(self, mock_get_last, mock_config, tmp_path):
+    def test_resolve_resume_path_auto(self, mock_config, tmp_path):
         """Test auto-detecting the latest run directory by forcing timestamps."""
         normal_dir = tmp_path / "normal"
         normal_dir.mkdir(parents=True)

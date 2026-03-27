@@ -33,7 +33,7 @@ def solver(mock_config, tmp_path):
 
 class TestMambaCipherSolver:
 
-    def test_decode_tokens_normal(self, solver, mock_config):
+    def test_decode_tokens_normal(self, solver):
         """Test standard character decoding logic."""
         token_ids = [10, 11, 12]
         decoded = solver._decode_tokens(token_ids)
@@ -56,7 +56,7 @@ class TestMambaCipherSolver:
         ser = solver._calculate_ser("hello", "jello!")
         assert ser == 0.4
 
-    def test_solve(self, solver, mock_config):
+    def test_solve(self, solver):
         """Test the solve pipeline (tensor creation to decoding)."""
         cipher_ids = [50, 51]
 
@@ -68,7 +68,7 @@ class TestMambaCipherSolver:
         assert solver.model.generate.called
         assert result == "ab"
 
-    def test_evaluate(self, solver, tmp_path, mock_config):
+    def test_evaluate(self, solver, tmp_path):
         """Test the full evaluation loop and file logging."""
         solver.model_path = tmp_path
 

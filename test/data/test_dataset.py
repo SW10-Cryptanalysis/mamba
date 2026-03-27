@@ -18,8 +18,8 @@ def mock_config(tmp_path: Path):
 def mock_dataset_content():
     """Mock content that simulate what load_from_disk returns."""
     return [
-        {"input_ids": [1, 10, 11, 2, 20, 21], "labels": [-100, -100, -100, -100, 20, 21]},
-        {"input_ids": [1, 50, 2, 60], "labels": [-100, -100, -100, 60]},
+        {"input_ids": [1, 10, 11, 2, 20, 21], "labels": [1, 10, 11, 2, 20, 21]},
+        {"input_ids": [1, 50, 2, 60], "labels": [1, 50, 2, 60]},
     ]
 
 class TestCipherPlainData:
@@ -57,7 +57,7 @@ class TestCipherPlainData:
             assert "labels" in item
 
             assert item["input_ids"] == [1, 10, 11, 2, 20, 21]
-            assert item["labels"] == [ -100, -100, -100, -100, 20, 21]
+            assert item["labels"] == [1, 10, 11, 2, 20, 21]
 
     @patch("src.data.dataset.load_from_disk")
     def test_len(self, mock_load, mock_config, mock_dataset_content):

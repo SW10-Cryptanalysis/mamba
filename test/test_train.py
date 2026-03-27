@@ -37,7 +37,7 @@ class TestTrainScript:
             main()
 
             mock_trainer_cls.assert_called_once()
-            args, kwargs = mock_trainer_cls.call_args
+            _, kwargs = mock_trainer_cls.call_args
             assert kwargs["resume"] == "./outputs/normal/run_2024"
 
     def test_pytorch_alloc_conf_set(self):
