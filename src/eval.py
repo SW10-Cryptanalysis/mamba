@@ -3,7 +3,8 @@ from datasets import load_from_disk
 from src.config import Config
 from src.engine.solver import MambaCipherSolver
 
-def main():
+def main() -> None:
+    """Begin the evaluation process."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, required=True)
     parser.add_argument("--spaces", action="store_true")

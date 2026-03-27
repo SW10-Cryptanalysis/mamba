@@ -5,12 +5,39 @@ from transformers.trainer_utils import get_last_checkpoint
 from src.models.mamba import get_model
 from src.data.dataset import CipherPlainData
 from src.data.pad_collator import PadCollator
+from src.config import Config
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 class MambaTrainer:
-    def __init__(self, config, resume):
+    """Orchestrates the training pipeline for the Mamba2 cipher model.
+
+    This class handles environment setup, dataset loading, configuration
+    synchronization with checkpoints, and the execution of the Hugging Face
+    Trainer loop.
+
+    Attributes:
+        cfg: Configuration object containing training hyperparameters.
+        resume (bool): Whether the current run is resuming from a checkpoint.
+        save_path (Path): Directory where checkpoints and logs are stored.
+        model (Mamba2ForCausalLM): The Mamba2 model instance.
+        collator (PadCollator): Data collator for dynamic padding.
+        train_ds (CipherPlainData): Training dataset split.
+        eval_ds (CipherPlainData): Validation dataset split.
+        trainer (Trainer): The initialized Hugging Face Trainer instance.
+
+    """
+
+    def __init__(self, config: Config, resume: bool | str) -> None:
+        """Initialize the trainer with config and sets up save/resume paths.
+
+        Args:
+            config: Configuration object containing paths and hyperparameters.
+            resume: If True, auto-detects the latest run.
+                If a string, uses that specific directory path.
+
+        """
         self.cfg = config
 
         if resume:
@@ -34,7 +61,12 @@ class MambaTrainer:
         self.trainer = self._setup_trainer()
 
     def _setup_trainer(self) -> Trainer:
-        """Configures the HF Trainer."""
+        """Configure the Hugging Face TrainingArguments and Trainer.
+
+        Returns:
+            Trainer: A fully configured Hugging Face Trainer.
+
+        """
         args = TrainingArguments(
             output_dir=str(self.save_path),
             num_train_epochs=self.cfg.epochs,
@@ -72,8 +104,18 @@ class MambaTrainer:
             data_collator=self.collator,
         )
 
-    def _load_config(self, current_config, checkpoint_path):
-        """Overwrites current_config with values found in the checkpoint."""
+    def _load_config(self, current_config: Config, checkpoint_path: str) -> Config:
+        """Overwrite current_config with values found in a checkpoint directory.
+
+        Args:
+            current_config: The current in-memory config object.
+            checkpoint_path (Union[str, Path]): Path to the checkpoint folder
+                containing 'project_config.json'.
+
+        Returns:
+            Any: The synchronized configuration object.
+
+        """
         config_file = Path(checkpoint_path) / "project_config.json"
         if config_file.exists():
             with open(config_file) as f:
@@ -85,20 +127,43 @@ class MambaTrainer:
             logger.info("Config successfully synchronized with checkpoint state.")
         return current_config
 
-    def _save_config(self, save_path: Path):
-        """Serializes the Config object to JSON."""
-        config_dict = {k: v for k, v in vars(self.cfg).items() if not k.startswith("__")}
+    def _save_config(self, save_path: Path) -> None:
+        """Serialize the current Config object to a JSON file.
+
+        Args:
+            save_path (Path): Directory where the config JSON will be saved.
+
+        """
+        config_dict = {k: v for k, v in vars(self.cfg).items()
+                       if not k.startswith("__")}
         with open(save_path / "project_config.json", "w") as f:
             json.dump(config_dict, f, indent=4, default=str)
 
-    def _resolve_resume_path(self, resume_arg) -> Path:
-        if isinstance(resume_arg, str):
-            target = Path(resume_arg)
+    def _resolve_resume_path(self, resume: bool | str) -> Path:
+        """Determine the directory path for resuming a previous run.
+
+        Args:
+            resume: Either a specific path string or a
+                boolean indicating auto-detection is required.
+
+        Returns:
+            Path: The resolved directory path.
+
+        Raises:
+            FileNotFoundError: If the specified path or auto-detected base
+                directory does not exist.
+
+        """
+        if isinstance(resume, str):
+            target = Path(resume)
             if not target.exists():
-                raise FileNotFoundError(f"Specified resume path {target} does not exist.")
+                raise FileNotFoundError(f"Specified resume path {target}"
+                                        "does not exist.")
             return target
 
-        base_dir = self.cfg.outputs_dir / ("spaces" if self.cfg.use_spaces else "normal")
+        base_dir = self.cfg.outputs_dir / (
+            "spaces" if self.cfg.use_spaces else "normal"
+        )
 
         if not base_dir.exists():
             raise FileNotFoundError(f"No previous runs found in {base_dir}")
@@ -111,8 +176,12 @@ class MambaTrainer:
         logger.info(f"Auto-detected latest run: {latest_run.name}")
         return latest_run
 
-    def run(self):
-        """Execute training loop."""
+    def run(self) -> None:
+        """Execute the training loop.
+
+        Handles the initial config save (for new runs), resumes from checkpoints
+        if applicable, and saves the final model and config upon completion.
+        """
         last_checkpoint = None
 
         if self.resume:

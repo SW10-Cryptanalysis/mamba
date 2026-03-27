@@ -46,15 +46,12 @@ class TestMambaTrainer:
         normal_dir = tmp_path / "normal"
         normal_dir.mkdir(parents=True)
 
-        # Create 'old_run'
         old_run = normal_dir / "old_run"
         old_run.mkdir()
 
-        # Create 'new_run'
         new_run = normal_dir / "new_run"
         new_run.mkdir()
 
-        # FORCE timestamps: Set new_run to be 100 seconds newer than old_run
         now = time.time()
         os.utime(old_run, (now - 100, now - 100))
         os.utime(new_run, (now + 100, now + 100))
@@ -62,7 +59,6 @@ class TestMambaTrainer:
         mock_config.outputs_dir = tmp_path
         mock_config.use_spaces = False
 
-        # Mocking everything to avoid the ImportError and setup issues
         with patch("src.engine.trainer.get_model"), \
              patch("src.engine.trainer.CipherPlainData"), \
              patch("src.engine.trainer.PadCollator"), \
@@ -71,7 +67,6 @@ class TestMambaTrainer:
 
             trainer = MambaTrainer(mock_config, resume=True)
 
-            # Now this should pass because new_run is definitively the 'latest'
             assert "new_run" in str(trainer.save_path)
 
     def test_save_config(self, trainer_with_mocks, tmp_path):
@@ -94,7 +89,6 @@ class TestMambaTrainer:
         mock_ckpt_path = Path("/fake/path")
         fake_json = {"learning_rate": 0.99, "epochs": 100}
 
-        # Mocking the open() call and the exists() check
         with patch("pathlib.Path.exists", return_value=True), \
              patch("builtins.open", mock_open(read_data=json.dumps(fake_json))):
 

@@ -4,10 +4,14 @@ from pathlib import Path
 from src.data.dataset import CipherPlainData
 
 @pytest.fixture
-def mock_config():
-    """Creates a mock config with a temporary directory."""
+def mock_config(tmp_path: Path):
+    """Creates a mock config with a unique, secure temporary directory."""
     config = MagicMock()
-    config.tokenized_dir = Path("/tmp/mock_data")
+
+    mock_dir = tmp_path / "mock_data"
+    mock_dir.mkdir()
+
+    config.tokenized_dir = mock_dir
     return config
 
 @pytest.fixture
@@ -34,9 +38,10 @@ class TestCipherPlainData:
 
     def test_init_file_not_found(self, mock_config):
         """Test if it raises FileNotFoundError when path is missing."""
-        with patch.object(Path, "exists", return_value=False):
-            with pytest.raises(FileNotFoundError, match="run preprocess.py first"):
-                CipherPlainData(mock_config, split="Validation")
+        with patch.object(Path, "exists", return_value=False), \
+             pytest.raises(FileNotFoundError, match="run preprocess.py first"):
+
+            CipherPlainData(mock_config, split="Validation")
 
     @patch("src.data.dataset.load_from_disk")
     def test_getitem(self, mock_load, mock_config, mock_dataset_content):

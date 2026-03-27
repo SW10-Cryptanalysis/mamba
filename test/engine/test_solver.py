@@ -17,31 +17,32 @@ def mock_config():
     return config
 
 @pytest.fixture
-def solver(mock_config):
-    # Mocking from_pretrained so it doesn't try to download/load weights
-    with patch("transformers.Mamba2ForCausalLM.from_pretrained") as mock_from_pretrained:
+def solver(mock_config, tmp_path):
+    """Creates a solver instance with a secure temp path and mocked weights."""
+    model_dir = tmp_path / "fake_model"
+    model_dir.mkdir()
+
+    with patch("src.engine.solver.Mamba2ForCausalLM.from_pretrained") as mock_from_pretrained:
         mock_model = MagicMock()
         mock_model.device = "cpu"
+        mock_model.config = MagicMock()
         mock_from_pretrained.return_value = mock_model
 
-        # Instantiate solver
-        s = MambaCipherSolver(model_path="/tmp/fake_model", config=mock_config)
+        s = MambaCipherSolver(model_path=str(model_dir), config=mock_config)
         return s
 
 class TestMambaCipherSolver:
 
     def test_decode_tokens_normal(self, solver, mock_config):
         """Test standard character decoding logic."""
-        # offset 10 + (ord('a') - ord('a')) = 10 ('a')
-        # offset 10 + (ord('b') - ord('a')) = 11 ('b')
-        token_ids = [10, 11, 12] # a, b, c
+        token_ids = [10, 11, 12]
         decoded = solver._decode_tokens(token_ids)
         assert decoded == "abc"
 
     def test_decode_tokens_with_spaces(self, solver, mock_config):
         """Test space decoding logic."""
         mock_config.use_spaces = True
-        token_ids = [10, 4, 11] # a, space, b
+        token_ids = [10, 4, 11]
         decoded = solver._decode_tokens(token_ids)
         assert decoded == "a_b"
 
@@ -52,8 +53,6 @@ class TestMambaCipherSolver:
 
     def test_calculate_ser_wrong(self, solver):
         """Test SER with mismatches and length differences."""
-        # 1 mismatch ('h' vs 'j') + 1 length diff ('!')
-        # Total error = 2 / 5 = 0.4
         ser = solver._calculate_ser("hello", "jello!")
         assert ser == 0.4
 
@@ -61,41 +60,32 @@ class TestMambaCipherSolver:
         """Test the solve pipeline (tensor creation to decoding)."""
         cipher_ids = [50, 51]
 
-        # Mock the model.generate output
-        # Input: [BOS, 50, 51, SEP] (len 4)
-        # We want to simulate the model returning [BOS, 50, 51, SEP, 10, 11]
         mock_output = torch.tensor([[0, 50, 51, 1, 10, 11]])
         solver.model.generate = MagicMock(return_value=mock_output)
 
         result = solver.solve(cipher_ids)
 
-        # Verify generate was called
         assert solver.model.generate.called
-        # Verify we only decoded the 'newly' generated tokens (10, 11 -> ab)
         assert result == "ab"
 
     def test_evaluate(self, solver, tmp_path, mock_config):
         """Test the full evaluation loop and file logging."""
-        # Redirect log to a temp pytest directory
         solver.model_path = tmp_path
 
         mock_dataset = [
             {
-                "input_ids": [0, 50, 51, 1, 10, 11], # BOS, C, C, SEP, P, P
+                "input_ids": [0, 50, 51, 1, 10, 11],
                 "raw_plaintext": "ab"
             }
         ]
 
-        # Mock solve to return what we expect
         solver.solve = MagicMock(return_value="ab")
 
         solver.evaluate(mock_dataset)
 
-        # Check if the jsonl file was created
         log_file = tmp_path / "evaluation_results.jsonl"
         assert log_file.exists()
 
-        # Verify the content of the log
         with open(log_file) as f:
             data = json.loads(f.readline())
             assert data["target"] == "ab"

@@ -6,9 +6,15 @@ from src.engine.trainer import MambaTrainer
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 def main() -> None:
+    """Begin the training process."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--spaces", action="store_true")
-    parser.add_argument("--resume", nargs="?", const=True, help="Resume latest or specify a folder")
+    parser.add_argument(
+        "--resume",
+        nargs="?",
+        const=True,
+        help="Resume latest or specify a folder",
+    )
     cmd_args = parser.parse_args()
 
     config = Config()

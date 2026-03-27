@@ -7,7 +7,16 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 def get_model(config: Config) -> Mamba2ForCausalLM:
-    """Init Mamba2 model with params from config."""
+    """Initialize a Mamba2 model with parameters defined in the project configuration.
+
+    Args:
+        config (Config): The global project configuration object containing
+            `mamba_config` (the architecture hyperparameters).
+
+    Returns:
+        Mamba2ForCausalLM: An initialized Mamba2 model ready for training or inference.
+
+    """
     m_dict = asdict(config.mamba_config)
 
     config = Mamba2Config(
