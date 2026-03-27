@@ -209,7 +209,7 @@ class Config:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaces" if self.use_spaces else "normal"
         return self.data_dir / f"tokenized_{suffix}"
-    
+
     @property
     def save_path(self) -> Path:
         """Dynamic outputs dir based on timestamp and whether we use spaces or not."""

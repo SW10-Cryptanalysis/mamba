@@ -1,61 +1,26 @@
-import pytest
-import json
-import torch
-import src.eval as eval_module
+from unittest.mock import MagicMock
+from src.eval import main
 
+def test_eval_main_flow(mocker):
+    # 1. Mock the Command Line Arguments
+    mock_args = mocker.patch("src.eval.argparse.ArgumentParser.parse_args")
+    mock_args.return_value = MagicMock(model_path="fake/path", spaces=True)
 
-@pytest.fixture
-def mock_eval_env(tmp_path):
-    """Sets up a fake environment for evaluation testing."""
-    test_dir = tmp_path / "test_data"
-    test_dir.mkdir()
+    # 2. Mock Config (and its internal path logic)
+    mock_config_cls = mocker.patch("src.eval.Config")
+    mock_config = mock_config_cls.return_value
+    # Set the tokenized_dir so the / "Test" operation works on a Mock
+    mock_config.tokenized_dir = MagicMock()
 
-    model_dir = tmp_path / "exp_latest"
-    model_dir.mkdir()
-    model_path = model_dir / "best.pth"
-    model_path.write_text("fake_weights")
+    # 3. Mock the Solver and Dataset loading
+    mock_solver_cls = mocker.patch("src.eval.MambaCipherSolver")
+    mock_load_ds = mocker.patch("src.eval.load_from_disk")
 
-    return test_dir, model_path
+    # 4. Execute
+    main()
 
-
-def test_test_model_logic(mocker, mock_eval_env):
-    test_dir, model_path = mock_eval_env
-
-    mocker.patch("src.eval.Path.exists", return_value=True)
-    mocker.patch("src.eval.PretokenizedCipherDataset")
-
-    mock_solver_class = mocker.patch("src.eval.CipherSolver")
-    mock_solver = mock_solver_class.return_value
-
-    mock_solver.decode.return_value = "hello"
-    mock_solver.decrypt.return_value = "hello_decrypted"
-    mock_solver.calculate_ser.return_value = 0.0
-
-    test_sep_id = 100
-
-    mock_input = torch.tensor([[1, 2, test_sep_id, 4, 5]])
-    fake_batch = {
-        "input_ids": mock_input,
-        "labels": mock_input,
-        "id": ["sample_001"],
-    }
-    mock_loader = mocker.patch("src.eval.DataLoader")
-    mock_loader.return_value = [fake_batch]
-
-    mock_config = mocker.patch("src.eval.config", create=True)
-    mock_config.max_len = 10
-    mock_config.save_path = str(model_path.parent.parent)
-    mock_config.sep_token_id = test_sep_id
-
-    eval_module.test_model(test_dir, model_path=model_path)
-
-    expected_output = model_path.parent / f"eval_{model_path.stem}.jsonl"
-    assert expected_output.exists(), f"Expected output file {expected_output} was not created."
-
-    with open(expected_output) as f:
-        lines = f.readlines()
-        assert len(lines) > 0
-        data = [json.loads(line) for line in lines]
-
-    assert data[0]["predicted"] == "hello_decrypted"
-    assert data[0]["ser"] == 0.0
+    # 5. Assertions: Verify the chain of command
+    mock_config.load_homophones.assert_called_once()
+    mock_solver_cls.assert_called_once_with("fake/path", mock_config)
+    mock_load_ds.assert_called_once()
+    mock_solver_cls.return_value.evaluate.assert_called_once()

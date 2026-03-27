@@ -1,108 +1,108 @@
-import json
-from pathlib import Path
 import pytest
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+import json
+import os
+import time
+from pathlib import Path
+from unittest.mock import MagicMock, patch, mock_open
 from src.engine.trainer import MambaTrainer
-from src.config import Config
-
-class SimpleLinearModel(nn.Module):
-    """A tiny CPU-friendly model that mimics the MambaModel interface."""
-    def __init__(self, vocab_size, char_offset):
-        super().__init__()
-        self.char_offset = char_offset
-        self.embedding = nn.Embedding(vocab_size, 16)
-        self.out = nn.Linear(16, vocab_size)
-
-    def forward(self, x):
-        return self.out(self.embedding(x))
 
 @pytest.fixture
-def cpu_trainer_setup(tmp_path):
-    config = Config()
-    config.save_path = Path(tmp_path)
-    config.learning_rate = 0.001
-    vocab_size = 200
-    char_offset = 100
+def mock_config(tmp_path):
+    """Provides a basic mock configuration."""
+    config = MagicMock()
+    config.save_path = tmp_path / "normal" / "run_1"
+    config.outputs_dir = tmp_path / "normal"
+    config.use_spaces = False
+    config.epochs = 1
+    config.batch_size = 4
+    config.grad_accum = 1
+    config.learning_rate = 1e-4
+    config.save_step = 10
+    config.pad_token_id = 0
+    return config
 
-    cipher = torch.randint(0, 100, (4, 5))
-    plain = torch.randint(100, 200, (4, 5))
-    loader = DataLoader(TensorDataset(cipher, plain), batch_size=2)
-    model = SimpleLinearModel(vocab_size, char_offset)
+@pytest.fixture
+def trainer_with_mocks(mock_config):
+    """Instantiates MambaTrainer with mocked external dependencies."""
+    with patch("src.engine.trainer.get_model"), \
+         patch("src.engine.trainer.CipherPlainData"), \
+         patch("src.engine.trainer.PadCollator"), \
+         patch("src.engine.trainer.Trainer"):
 
-    trainer = MambaTrainer(
-        model=model,
-        train_loader=loader,
-        val_loader=loader,
-        config=config,
-        device="cpu"
-    )
-    return trainer
+        trainer = MambaTrainer(mock_config, resume=False)
+        return trainer
 
-def test_trainer_step_logic(cpu_trainer_setup):
-    """Verify the backprop and weight update logic works on CPU."""
-    trainer = cpu_trainer_setup
+class TestMambaTrainer:
 
-    for param_group in trainer.optimizer.param_groups:
-        param_group["lr"] = 1.0
+    def test_init_fresh_run(self, trainer_with_mocks, mock_config):
+        """Verify that a fresh run initializes paths correctly."""
+        assert not trainer_with_mocks.resume
+        assert trainer_with_mocks.save_path == Path(mock_config.save_path)
+        assert trainer_with_mocks.save_path.exists()
 
-    # Capture weights before a step
-    params = list(trainer.model.parameters())
-    initial_weight = params[0].clone().detach()
+    @patch("src.engine.trainer.get_last_checkpoint")
+    def test_resolve_resume_path_auto(self, mock_get_last, mock_config, tmp_path):
+        """Test auto-detecting the latest run directory by forcing timestamps."""
+        normal_dir = tmp_path / "normal"
+        normal_dir.mkdir(parents=True)
 
-    # Run one epoch
-    loss = trainer._train_one_epoch()
+        # Create 'old_run'
+        old_run = normal_dir / "old_run"
+        old_run.mkdir()
 
-    # Verify weights changed
-    updated_weight = params[0].detach()
-    assert not torch.equal(initial_weight, updated_weight)
-    assert loss > 0
+        # Create 'new_run'
+        new_run = normal_dir / "new_run"
+        new_run.mkdir()
 
-def test_history_logging(cpu_trainer_setup):
-    """Verify that history dict is populated correctly."""
-    config = Config
-    trainer = cpu_trainer_setup
-    trainer.train(epochs=2)
+        # FORCE timestamps: Set new_run to be 100 seconds newer than old_run
+        now = time.time()
+        os.utime(old_run, (now - 100, now - 100))
+        os.utime(new_run, (now + 100, now + 100))
 
-    assert len(trainer.history["train_loss"]) == 2
-    assert len(trainer.history["learning_rates"]) == 2
-    assert trainer.history["learning_rates"][0] == config.learning_rate
+        mock_config.outputs_dir = tmp_path
+        mock_config.use_spaces = False
 
-def test_save_config(cpu_trainer_setup):
-    """Verify that configuration is correctly serialized to JSON."""
-    trainer = cpu_trainer_setup
-    config_path = trainer.exp_dir / "config.json"
+        # Mocking everything to avoid the ImportError and setup issues
+        with patch("src.engine.trainer.get_model"), \
+             patch("src.engine.trainer.CipherPlainData"), \
+             patch("src.engine.trainer.PadCollator"), \
+             patch("src.engine.trainer.TrainingArguments"), \
+             patch("src.engine.trainer.Trainer"):
 
-    assert config_path.exists()
+            trainer = MambaTrainer(mock_config, resume=True)
 
-    with open(config_path) as f:
-        saved_data = json.load(f)
+            # Now this should pass because new_run is definitively the 'latest'
+            assert "new_run" in str(trainer.save_path)
 
-    assert "learning_rate" in saved_data
-    assert saved_data["learning_rate"] == trainer.config.learning_rate
+    def test_save_config(self, trainer_with_mocks, tmp_path):
+        """Ensure _save_config writes the expected keys to JSON."""
+        test_dir = tmp_path / "test_save"
+        test_dir.mkdir()
 
-def test_load_checkpoint_and_resume(cpu_trainer_setup, tmp_path):
-    """Verify trainer can restore state from a .pth file and history.json."""
-    trainer = cpu_trainer_setup
+        trainer_with_mocks.cfg.test_param = "hello"
+        trainer_with_mocks._save_config(test_dir)
 
-    checkpoint_path = trainer.exp_dir / "manual_check.pth"
-    state = {
-        "epoch": 5,
-        "model_state_dict": trainer.model.state_dict(),
-        "optimizer_state_dict": trainer.optimizer.state_dict(),
-        "scheduler_state_dict": trainer.scheduler.state_dict(),
-        "val_loss": 0.1234
-    }
-    torch.save(state, checkpoint_path)
+        config_file = test_dir / "project_config.json"
+        assert config_file.exists()
 
-    fake_history = {"train_loss": [0.5, 0.4], "val_loss": [0.5, 0.4], "learning_rates": [0.01, 0.01]}
-    with open(trainer.exp_dir / "history.json", "w") as f:
-        json.dump(fake_history, f)
+        with open(config_file) as f:
+            data = json.load(f)
+            assert data["test_param"] == "hello"
 
-    trainer.load_checkpoint(checkpoint_path)
+    def test_load_config_sync(self, trainer_with_mocks):
+        """Test that _load_config correctly overwrites current config attributes."""
+        mock_ckpt_path = Path("/fake/path")
+        fake_json = {"learning_rate": 0.99, "epochs": 100}
 
-    assert trainer.current_epoch == 5
-    assert trainer.best_val_loss == 0.1234
-    assert len(trainer.history["train_loss"]) == 2
-    assert trainer.history["train_loss"][0] == 0.5
+        # Mocking the open() call and the exists() check
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("builtins.open", mock_open(read_data=json.dumps(fake_json))):
+
+            synced_cfg = trainer_with_mocks._load_config(trainer_with_mocks.cfg, mock_ckpt_path)
+
+            assert synced_cfg.learning_rate == 0.99
+            assert synced_cfg.epochs == 100
+
+    def test_run_logic(self, trainer_with_mocks):
+        """Verify the sequence of events in the run() method."""
+        trainer_with_mocks.trainer.train = MagicMock()

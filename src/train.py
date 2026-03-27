@@ -14,7 +14,7 @@ def main() -> None:
     config = Config()
     config.use_spaces = cmd_args.spaces
 
-    trainer = MambaTrainer(config, resume_arg=cmd_args.resume)
+    trainer = MambaTrainer(config, resume=cmd_args.resume)
     trainer.run()
 
 if __name__ == "__main__":

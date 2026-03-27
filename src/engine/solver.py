@@ -12,10 +12,10 @@ class MambaCipherSolver:
         self.config = config
         self.model_path = Path(model_path)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
         # 1. Load Model
         self.model = self._load_model(model_path)
-        
+
     def _load_model(self, path: str) -> Mamba2ForCausalLM:
         logger.info(f"Loading Mamba2 Solver from {path}...")
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -33,7 +33,7 @@ class MambaCipherSolver:
         """Decodes a single list of cipher IDs into plaintext."""
         input_ids = [self.config.bos_token_id] + cipher_ids + [self.config.sep_token_id]
         input_tensor = torch.tensor([input_ids]).to(self.model.device)
-        
+
         output_ids = self.model.generate(
             input_tensor,
             attention_mask=torch.ones_like(input_tensor),
@@ -70,9 +70,9 @@ class MambaCipherSolver:
         """Runs the solver over an entire dataset and logs results."""
         output_log = self.model_path / "evaluation_results.jsonl"
         logger.info(f"Evaluating {len(dataset)} samples. Logging to {output_log}")
-        
+
         total_ser, count = 0.0, 0
-        
+
         for i, item in enumerate(dataset):
             all_ids = item["input_ids"]
             try:
@@ -95,9 +95,9 @@ class MambaCipherSolver:
                 "target": item["raw_plaintext"],
                 "pred": prediction,
                 "ser": round(ser, 4),
-                "time": round(duration, 4)
+                "time": round(duration, 4),
             }
-            
+
             with open(output_log, "a") as f:
                 f.write(json.dumps(result) + "\n")
 

@@ -1,69 +1,103 @@
 import pytest
 import torch
+import json
 from unittest.mock import MagicMock, patch
-from src.engine.solver import CipherSolver
-from src.config import Config
+from src.engine.solver import MambaCipherSolver
 
 @pytest.fixture
-def config():
-    c = Config()
-    c.max_len = 10
-    return c
+def mock_config():
+    config = MagicMock()
+    config.bos_token_id = 0
+    config.sep_token_id = 1
+    config.eos_token_id = 2
+    config.pad_token_id = 3
+    config.space_token_id = 4
+    config.char_offset = 10
+    config.use_spaces = False
+    return config
 
 @pytest.fixture
-def solver(config):
-    return CipherSolver(config, device="cpu")
+def solver(mock_config):
+    # Mocking from_pretrained so it doesn't try to download/load weights
+    with patch("transformers.Mamba2ForCausalLM.from_pretrained") as mock_from_pretrained:
+        mock_model = MagicMock()
+        mock_model.device = "cpu"
+        mock_from_pretrained.return_value = mock_model
 
-def test_calculate_ser(solver):
-    """Test the Symbol Error Rate math."""
-    assert pytest.approx(solver.calculate_ser("hello", "hella")) == 0.2
-    assert solver.calculate_ser("abc", "abc") == 0.0
-    assert solver.calculate_ser("abc", "xyz") == 1.0
+        # Instantiate solver
+        s = MambaCipherSolver(model_path="/tmp/fake_model", config=mock_config)
+        return s
 
-@patch("torch.load")
-@patch("src.engine.solver.MambaModel")
-def test_load_checkpoint(mock_mamba_class, mock_torch_load, solver, tmp_path):
-    """Verify that loading a checkpoint sets up the model and metadata correctly."""
-    # 1. Mock the checkpoint dictionary
-    mock_torch_load.return_value = {
-        "char_offset": 100,
-        "model_state_dict": {},
-        "val_loss": 0.5
-    }
+class TestMambaCipherSolver:
 
-    # 2. Create a dummy path
-    ckpt_path = tmp_path / "test.pth"
-    ckpt_path.write_text("dummy content")
+    def test_decode_tokens_normal(self, solver, mock_config):
+        """Test standard character decoding logic."""
+        # offset 10 + (ord('a') - ord('a')) = 10 ('a')
+        # offset 10 + (ord('b') - ord('a')) = 11 ('b')
+        token_ids = [10, 11, 12] # a, b, c
+        decoded = solver._decode_tokens(token_ids)
+        assert decoded == "abc"
 
-    # 3. Call load
-    solver.load_checkpoint(ckpt_path)
+    def test_decode_tokens_with_spaces(self, solver, mock_config):
+        """Test space decoding logic."""
+        mock_config.use_spaces = True
+        token_ids = [10, 4, 11] # a, space, b
+        decoded = solver._decode_tokens(token_ids)
+        assert decoded == "a_b"
 
-    # 4. Assertions
-    assert solver.model is not None
-    assert solver.metadata["val_loss"] == 0.5
-    # Ensure the model was set to eval mode
-    solver.model.eval.assert_called_once()
+    def test_calculate_ser_perfect(self, solver):
+        """Test SER when prediction is perfect."""
+        ser = solver._calculate_ser("hello", "hello")
+        assert ser == 0.0
 
-@patch("src.engine.solver.CipherSolver.load_checkpoint")
-def test_decrypt_input_formats(mock_load, solver):
-    """Verify decrypt handles both list[int] and space-separated strings."""
-    # Mock the model and its return value
-    solver.model = MagicMock()
+    def test_calculate_ser_wrong(self, solver):
+        """Test SER with mismatches and length differences."""
+        # 1 mismatch ('h' vs 'j') + 1 length diff ('!')
+        # Total error = 2 / 5 = 0.4
+        ser = solver._calculate_ser("hello", "jello!")
+        assert ser == 0.4
 
-    # Create fake logits
-    fake_logits = torch.zeros((1, 3, 500))
-    fake_logits[0, :, 102] = 10.0
-    solver.model.return_value = fake_logits
+    def test_solve(self, solver, mock_config):
+        """Test the solve pipeline (tensor creation to decoding)."""
+        cipher_ids = [50, 51]
 
-    # Test String Input
-    res1 = solver.decrypt("1 2 3")
-    # Test List Input
-    res2 = solver.decrypt([1, 2, 3])
+        # Mock the model.generate output
+        # Input: [BOS, 50, 51, SEP] (len 4)
+        # We want to simulate the model returning [BOS, 50, 51, SEP, 10, 11]
+        mock_output = torch.tensor([[0, 50, 51, 1, 10, 11]])
+        solver.model.generate = MagicMock(return_value=mock_output)
 
-    assert isinstance(res1, str)
-    assert res1 == res2
+        result = solver.solve(cipher_ids)
 
-def test_decrypt_before_load_raises_error(solver):
-    """Ensure we can't decrypt without a model."""
-    with pytest.raises(RuntimeError, match="Model not loaded"):
-        solver.decrypt("1 2 3")
+        # Verify generate was called
+        assert solver.model.generate.called
+        # Verify we only decoded the 'newly' generated tokens (10, 11 -> ab)
+        assert result == "ab"
+
+    def test_evaluate(self, solver, tmp_path, mock_config):
+        """Test the full evaluation loop and file logging."""
+        # Redirect log to a temp pytest directory
+        solver.model_path = tmp_path
+
+        mock_dataset = [
+            {
+                "input_ids": [0, 50, 51, 1, 10, 11], # BOS, C, C, SEP, P, P
+                "raw_plaintext": "ab"
+            }
+        ]
+
+        # Mock solve to return what we expect
+        solver.solve = MagicMock(return_value="ab")
+
+        solver.evaluate(mock_dataset)
+
+        # Check if the jsonl file was created
+        log_file = tmp_path / "evaluation_results.jsonl"
+        assert log_file.exists()
+
+        # Verify the content of the log
+        with open(log_file) as f:
+            data = json.loads(f.readline())
+            assert data["target"] == "ab"
+            assert data["pred"] == "ab"
+            assert data["ser"] == 0.0

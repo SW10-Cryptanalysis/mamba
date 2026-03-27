@@ -16,7 +16,7 @@ class MambaTrainer:
         if resume:
             self.save_path = self._resolve_resume_path(resume)
             self.resume = True
-            
+
             last_ckpt = get_last_checkpoint(str(self.save_path))
             if last_ckpt:
                 logger.info(f"Resuming experiment: {self.save_path.name}")
@@ -41,7 +41,7 @@ class MambaTrainer:
             per_device_train_batch_size=self.cfg.batch_size,
             gradient_accumulation_steps=self.cfg.grad_accum,
             learning_rate=self.cfg.learning_rate,
-            
+
             # Optimization & Precision
             bf16=True,
             tf32=True,
@@ -53,13 +53,13 @@ class MambaTrainer:
             eval_steps=self.cfg.save_step,
             logging_steps=10, # Hardcoded or from config
             save_steps=self.cfg.save_step,
-            
+
             # Checkpointing
             save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
-            
+
             dataloader_num_workers=8,
             dataloader_pin_memory=True,
         )
@@ -76,7 +76,7 @@ class MambaTrainer:
         """Overwrites current_config with values found in the checkpoint."""
         config_file = Path(checkpoint_path) / "project_config.json"
         if config_file.exists():
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 saved_data = json.load(f)
 
             for key, value in saved_data.items():
@@ -99,14 +99,14 @@ class MambaTrainer:
             return target
 
         base_dir = self.cfg.outputs_dir / ("spaces" if self.cfg.use_spaces else "normal")
-        
+
         if not base_dir.exists():
             raise FileNotFoundError(f"No previous runs found in {base_dir}")
 
         subdirs = [d for d in base_dir.iterdir() if d.is_dir()]
         if not subdirs:
             raise FileNotFoundError(f"No run folders found in {base_dir}")
-            
+
         latest_run = max(subdirs, key=lambda d: d.stat().st_mtime)
         logger.info(f"Auto-detected latest run: {latest_run.name}")
         return latest_run
@@ -114,7 +114,7 @@ class MambaTrainer:
     def run(self):
         """Execute training loop."""
         last_checkpoint = None
-        
+
         if self.resume:
             last_checkpoint = get_last_checkpoint(str(self.save_path))
             if last_checkpoint:
@@ -132,5 +132,5 @@ class MambaTrainer:
         self.trainer.save_model(final_path)
 
         self._save_config(final_path)
-        
+
         logger.info(f"Model and project config saved to {final_path}")
