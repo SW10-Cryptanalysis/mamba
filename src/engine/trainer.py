@@ -54,11 +54,32 @@ class MambaTrainer:
 
         self.save_path.mkdir(parents=True, exist_ok=True)
 
+        self._inject_mamba2_kernels()
         self.model = get_model(config)
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
         self.train_ds = CipherPlainData(config, split="Training")
         self.eval_ds = CipherPlainData(config, split="Validation")
         self.trainer = self._setup_trainer()
+
+    def _inject_mamba2_kernels(self) -> None:
+        """Force-injects Mamba2 CUDA kernels into the transformers modeling namespace."""
+        try:
+            import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
+            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
+            from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+
+            mamba2_mod.selective_state_update = selective_state_update
+            mamba2_mod.mamba_chunk_scan_combined = mamba_chunk_scan_combined
+            mamba2_mod.mamba_split_conv1d_scan_combined = mamba_split_conv1d_scan_combined
+            mamba2_mod.causal_conv1d_fn = causal_conv1d_fn
+            mamba2_mod.causal_conv1d_update = causal_conv1d_update
+
+            mamba2_mod.is_fast_path_available = True
+            
+            logger.info("Mamba2 Kernel Injection Successful: Fast Path Forced.")
+        except Exception as e:
+            logger.error(f"Mamba2 Kernel Injection failed: {e}")
 
     def _setup_trainer(self) -> Trainer:
         """Configure the Hugging Face TrainingArguments and Trainer.
