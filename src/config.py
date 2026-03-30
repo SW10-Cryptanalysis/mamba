@@ -111,6 +111,7 @@ class CosineSchedulerConfig:
     learning_rate: float = 5e-4
     warmup_ratio: float = 0.1
     weight_decay: float = 0.1
+    grad_accum: int = 1
 
     epochs: int = 30
     batch_size: int = 128

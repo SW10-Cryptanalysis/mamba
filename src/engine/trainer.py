@@ -90,10 +90,10 @@ class MambaTrainer:
         """
         args = TrainingArguments(
             output_dir=str(self.save_path),
-            num_train_epochs=self.cfg.epochs,
-            per_device_train_batch_size=self.cfg.batch_size,
-            gradient_accumulation_steps=self.cfg.grad_accum,
-            learning_rate=self.cfg.learning_rate,
+            num_train_epochs=self.cfg.scheduler_config.epochs,
+            per_device_train_batch_size=self.cfg.scheduler_config.batch_size,
+            gradient_accumulation_steps=self.cfg.scheduler_config.grad_accum,
+            learning_rate=self.cfg.scheduler_config.learning_rate,
 
             # Optimization & Precision
             bf16=True,
