@@ -113,7 +113,7 @@ class CosineSchedulerConfig:
     weight_decay: float = 0.1
     grad_accum: int = 1
 
-    epochs: int = 30
+    epochs: int = 10
     batch_size: int = 128
 
 

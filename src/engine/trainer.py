@@ -76,7 +76,7 @@ class MambaTrainer:
             mamba2_mod.causal_conv1d_update = causal_conv1d_update
 
             mamba2_mod.is_fast_path_available = True
-            
+
             logger.info("Mamba2 Kernel Injection Successful: Fast Path Forced.")
         except Exception as e:
             logger.error(f"Mamba2 Kernel Injection failed: {e}")
@@ -203,6 +203,9 @@ class MambaTrainer:
         Handles the initial config save (for new runs), resumes from checkpoints
         if applicable, and saves the final model and config upon completion.
         """
+        import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
+        print(f"--- FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available} ---")
+
         last_checkpoint = None
 
         if self.resume:
