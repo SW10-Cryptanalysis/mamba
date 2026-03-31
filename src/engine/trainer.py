@@ -98,6 +98,8 @@ class MambaTrainer:
             # Optimization & Precision
             bf16=True,
             tf32=True,
+            fsdp="full_shard auto_wrap",
+            fsdp_config={"transformer_layer_cls_to_wrap": ["Mamba2Block"]},
             optim="adamw_torch_fused",
             gradient_checkpointing=False,
 
