@@ -99,9 +99,14 @@ class MambaTrainer:
             bf16=True,
             tf32=True,
             fsdp="full_shard auto_wrap",
-            fsdp_config={"transformer_layer_cls_to_wrap": ["Mamba2Block"]},
+            fsdp_config={
+                "transformer_layer_cls_to_wrap": ["Mamba2Block"],
+                "activation_checkpointing": True,
+            },
             optim="adamw_torch_fused",
-            gradient_checkpointing=False,
+            gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
+
 
             # Eval & Logging
             eval_strategy="steps",
