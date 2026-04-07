@@ -65,17 +65,17 @@ class MambaConfig:
 
     """
 
-    num_heads: int = 128
-    head_dim: int = 64
+    num_heads: int = 64
+    head_dim: int = 32
     vocab_size: int = field(init=False)
-    hidden_size: int = 4096
-    state_size: int = 128
-    num_hidden_layers: int = 64
+    hidden_size: int = 2048
+    state_size: int = 32
+    num_hidden_layers: int = 32
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int = field(init=False)
     sep_token_id: int = field(init=False)
     eos_token_id: int = field(init=False)
-    expand: int = 2
+    expand: int = 1
     conv_kernel: int = 4
     n_groups: int = 8
     use_bias: bool = False
@@ -111,10 +111,10 @@ class CosineSchedulerConfig:
     learning_rate: float = 5e-4
     warmup_ratio: float = 0.1
     weight_decay: float = 0.1
-    grad_accum: int = 1
+    grad_accum: int = 64
 
     epochs: int = 10
-    batch_size: int = 128
+    batch_size: int = 2
 
 
 @dataclass

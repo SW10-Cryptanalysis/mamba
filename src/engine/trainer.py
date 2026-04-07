@@ -53,8 +53,11 @@ class MambaTrainer:
             self.resume = False
 
         self.save_path.mkdir(parents=True, exist_ok=True)
-
+        import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
         self._inject_mamba2_kernels()
+        print(
+            f"---NEW FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available} ---"
+        )
         self.model = get_model(config)
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
         self.train_ds = CipherPlainData(config, split="Training")
@@ -104,9 +107,7 @@ class MambaTrainer:
                 "activation_checkpointing": True,
             },
             optim="adamw_torch_fused",
-            gradient_checkpointing=True,
-            gradient_checkpointing_kwargs={"use_reentrant": False},
-
+            gradient_checkpointing=False,
 
             # Eval & Logging
             eval_strategy="steps",
