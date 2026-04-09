@@ -186,23 +186,22 @@ class MambaTrainer:
         if isinstance(resume, str):
             target = Path(resume)
             if not target.exists():
-                raise FileNotFoundError(f"Specified resume path {target}"
-                                        "does not exist.")
+                raise FileNotFoundError(f"Specified resume path {target} does not exist.")
             return target
 
-        base_dir = self.cfg.outputs_dir / (
-            "spaces" if self.cfg.use_spaces else "normal"
-        )
+        prefix = "spaces" if self.cfg.use_spaces else "normal"
+        base_dir = Path(self.cfg.outputs_dir)
 
         if not base_dir.exists():
-            raise FileNotFoundError(f"No previous runs found in {base_dir}")
+            raise FileNotFoundError(f"Base output directory {base_dir} does not exist.")
 
-        subdirs = [d for d in base_dir.iterdir() if d.is_dir()]
+        subdirs = [d for d in base_dir.glob(f"{prefix}_*") if d.is_dir()]
+
         if not subdirs:
-            raise FileNotFoundError(f"No run folders found in {base_dir}")
+            raise FileNotFoundError(f"No previous runs found in {base_dir} starting with '{prefix}_'")
 
         latest_run = max(subdirs, key=lambda d: d.stat().st_mtime)
-        logger.info(f"Auto-detected latest run: {latest_run.name}")
+        logger.info(f"Auto-detected latest {prefix} run: {latest_run.name}")
         return latest_run
 
     def run(self) -> None:
