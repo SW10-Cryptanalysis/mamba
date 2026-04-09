@@ -65,12 +65,12 @@ class MambaConfig:
 
     """
 
-    num_heads: int = 64
-    head_dim: int = 32
+    num_heads: int = 16
+    head_dim: int = 64
     vocab_size: int = field(init=False)
-    hidden_size: int = 2048
+    hidden_size: int = 1024
     state_size: int = 32
-    num_hidden_layers: int = 32
+    num_hidden_layers: int = 8
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int = field(init=False)
     sep_token_id: int = field(init=False)
@@ -89,7 +89,7 @@ class MambaConfig:
     time_step_floor: float = 1e-4
     time_step_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
     rescale_prenorm_residual: bool = False
-    use_cache: bool = True
+    use_cache: bool = False
     rms_norm: bool = True
     chunk_size: int = 256
     tie_word_embeddings: bool = False
@@ -111,10 +111,10 @@ class CosineSchedulerConfig:
     learning_rate: float = 5e-4
     warmup_ratio: float = 0.1
     weight_decay: float = 0.1
-    grad_accum: int = 64
+    grad_accum: int = 1
 
-    epochs: int = 10
-    batch_size: int = 2
+    epochs: int = 5
+    batch_size: int = 8
 
 
 @dataclass
@@ -168,7 +168,7 @@ class Config:
     scheduler_config: CosineSchedulerConfig = field(
         default_factory=CosineSchedulerConfig,
     )
-    save_step: int = 5000
+    save_step: int = 1000
 
     outputs_dir: Path = Path(__file__).parent.parent / "outputs"
     data_dir = Path(__file__).parent.parent.parent / "Ciphers"
@@ -208,7 +208,7 @@ class Config:
     @property
     def tokenized_dir(self) -> Path:
         """Dynamic path based on whether we use spaces or not."""
-        suffix = "spaces" if self.use_spaces else "normal"
+        suffix = "spaced" if self.use_spaces else "normal"
         return self.data_dir / f"tokenized_{suffix}"
 
     @property
