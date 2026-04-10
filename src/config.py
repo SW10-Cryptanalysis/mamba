@@ -6,10 +6,6 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-TEXT_LEN = 10_000
-TOTAL_SEQ = TEXT_LEN * 2 + 3
-
-
 @dataclass
 class MambaConfig:
     r"""Configuration class for the Mamba2 model.
@@ -177,8 +173,7 @@ class Config:
 
     plain_vocab_size: int = 26
     unique_homophones: int = 2503
-    max_len: int = TOTAL_SEQ
-    buffer: int = 50
+    buffer: int = 10
     pad_token_id = 0
 
     @property
@@ -211,6 +206,11 @@ class Config:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaced" if self.use_spaces else "normal"
         return self.data_dir / f"tokenized_{suffix}"
+
+    @property
+    def max_len(self) -> int:
+        """Max len based on with or without spaces"""
+        return 13077 * 2 + 3 + self.buffer if self.use_spaces else 10063 * 2 + 3 + self.buffer
 
     @property
     def save_path(self) -> Path:
