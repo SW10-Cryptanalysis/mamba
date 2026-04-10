@@ -97,6 +97,8 @@ class MambaTrainer:
             per_device_train_batch_size=self.cfg.scheduler_config.batch_size,
             gradient_accumulation_steps=self.cfg.scheduler_config.grad_accum,
             learning_rate=self.cfg.scheduler_config.learning_rate,
+            lr_scheduler_type=self.cfg.scheduler_config.lr_scheduler_type,
+            warmup_steps=self.cfg.scheduler_config.warmup_ratio,
 
             # Optimization & Precision
             bf16=True,

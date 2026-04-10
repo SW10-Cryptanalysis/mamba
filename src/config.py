@@ -109,6 +109,7 @@ class CosineSchedulerConfig:
     """
 
     learning_rate: float = 5e-4
+    lr_scheduler_type: str = "cosine"
     warmup_ratio: float = 0.1
     weight_decay: float = 0.1
     grad_accum: int = 1
