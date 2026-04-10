@@ -103,11 +103,7 @@ class MambaTrainer:
             # Optimization & Precision
             bf16=True,
             tf32=True,
-            fsdp="full_shard auto_wrap",
-            fsdp_config={
-                "transformer_layer_cls_to_wrap": ["Mamba2Block"],
-                "activation_checkpointing": True,
-            },
+            ddp_find_unused_parameters=False,
             optim="adamw_torch_fused",
             gradient_checkpointing=False,
 
@@ -123,7 +119,7 @@ class MambaTrainer:
             metric_for_best_model="eval_loss",
             greater_is_better=False,
 
-            dataloader_num_workers=8,
+            dataloader_num_workers=4,
             dataloader_pin_memory=True,
         )
 
@@ -168,6 +164,10 @@ class MambaTrainer:
         config_dict = {k: v for k, v in vars(self.cfg).items()
                        if not k.startswith("__")}
         config_dict["max_len"] = self.cfg.max_len
+        config_dict["sep_token_id"] = self.cfg.sep_token_id
+        config_dict["space_token_id"] = self.cfg.space_token_id
+        config_dict["eos_token_id"] = self.cfg.eos_token_id
+        config_dict["char_offset"] = self.cfg.char_offset
         with open(save_path / "project_config.json", "w") as f:
             json.dump(config_dict, f, indent=4, default=str)
 

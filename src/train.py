@@ -17,8 +17,7 @@ def main() -> None:
     )
     cmd_args = parser.parse_args()
 
-    config = Config()
-    config.use_spaces = cmd_args.spaces
+    config = Config(use_spaces=cmd_args.spaces)
     config.load_homophones()
 
     trainer = MambaTrainer(config, resume=cmd_args.resume)
