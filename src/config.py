@@ -216,8 +216,7 @@ class Config:
     def save_path(self) -> Path:
         """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
         mode = "spaces" if self.use_spaces else "normal"
-        timestamp = datetime.now().strftime("%d%m_%H%M%S_%Y")
-        return self.outputs_dir / f"{mode}_{timestamp}"
+        return self.outputs_dir / f"{mode}_{self._timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:
         """Load the homophone metadata file and set the unique homophone count."""
@@ -243,4 +242,5 @@ class Config:
 
     def __post_init__(self) -> None:
         """Post-initialization hook to load homophone metadata."""
+        self._timestamp = datetime.now().strftime("%d%m_%H%M%S_%Y")
         self.load_homophones()

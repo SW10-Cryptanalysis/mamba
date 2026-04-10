@@ -167,6 +167,7 @@ class MambaTrainer:
         """
         config_dict = {k: v for k, v in vars(self.cfg).items()
                        if not k.startswith("__")}
+        config_dict["max_len"] = self.cfg.max_len
         with open(save_path / "project_config.json", "w") as f:
             json.dump(config_dict, f, indent=4, default=str)
 
