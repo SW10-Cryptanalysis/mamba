@@ -65,7 +65,7 @@ class MambaConfig:
     head_dim: int = 64
     vocab_size: int = field(init=False)
     hidden_size: int = 1024
-    state_size: int = 32
+    state_size: int = 64
     num_hidden_layers: int = 8
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int = field(init=False)
@@ -108,10 +108,10 @@ class CosineSchedulerConfig:
     lr_scheduler_type: str = "cosine"
     warmup_ratio: float = 0.1
     weight_decay: float = 0.1
-    grad_accum: int = 1
+    grad_accum: int = 2
 
     epochs: int = 5
-    batch_size: int = 8
+    batch_size: int = 4
 
 
 @dataclass
