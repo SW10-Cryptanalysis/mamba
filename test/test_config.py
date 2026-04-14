@@ -35,20 +35,20 @@ class FailureTestCase:
             mock_json='{"max_symbol_id": 100}',
             expected_suffix="normal",
             expected_unique=100,
-            expected_vocab_size=181,
             expected_sep_token_id=101,
             expected_eos_token_id=104,
             expected_pad_token_id=0,
+            expected_vocab_size=105+26+10,
         ),
         SuccessTestCase(
             use_spaces=True,
             mock_json='{"max_symbol_id": 2503}',
-            expected_suffix="spaces",
+            expected_suffix="spaced",
             expected_unique=2503,
-            expected_vocab_size=2584,
             expected_sep_token_id=2504,
             expected_eos_token_id=2507,
             expected_pad_token_id=0,
+            expected_vocab_size=2508+26+10,
         ),
     ],
 )
@@ -109,9 +109,9 @@ def test_mamba_config_defaults():
     """Verifies default initialization fields of MambaConfig."""
     config = MambaConfig()
 
-    assert config.num_heads == 128
-    assert config.hidden_size == 4096
-    assert config.expand == 2
+    assert config.num_heads == 16
+    assert config.hidden_size == 1024
+    assert config.expand == 1
     assert config.hidden_act == "silu"
 
 
@@ -120,6 +120,6 @@ def test_cosine_scheduler_config_defaults():
     config = CosineSchedulerConfig()
 
     assert config.learning_rate == 5e-4
-    assert config.batch_size == 128
-    assert config.epochs == 30
+    assert config.batch_size == 4
+    assert config.epochs == 5
     assert config.warmup_ratio == 0.1

@@ -209,8 +209,11 @@ class Config:
 
     @property
     def max_len(self) -> int:
-        """Max len based on with or without spaces"""
-        return 13077 * 2 + 3 + self.buffer if self.use_spaces else 10063 * 2 + 3 + self.buffer
+        """Max len based on with or without spaces."""
+        return (
+            13077 * 2 + 3 + self.buffer if self.use_spaces
+            else 10063 * 2 + 3 + self.buffer
+        )
 
     @property
     def save_path(self) -> Path:

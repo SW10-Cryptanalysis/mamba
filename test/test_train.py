@@ -7,21 +7,22 @@ class TestTrainScript:
     @patch("src.train.Config")
     @patch("src.train.MambaTrainer")
     def test_train_main_flow(self, mock_trainer_cls, mock_config_cls, mock_parse_args):
-        """Tests that train.py correctly wires config and triggers the trainer."""
 
         mock_args = MagicMock()
         mock_args.spaces = True
         mock_args.resume = True
         mock_parse_args.return_value = mock_args
 
-        mock_config = mock_config_cls.return_value
-        mock_trainer_instance = mock_trainer_cls.return_value
+        mock_config_instance = mock_config_cls.return_value
 
         main()
 
-        assert mock_config.use_spaces is True
-        mock_trainer_cls.assert_called_once_with(mock_config, resume=True)
-        mock_trainer_instance.run.assert_called_once()
+        mock_config_cls.assert_called_once_with(use_spaces=True)
+
+        mock_config_instance.load_homophones.assert_called_once()
+
+        mock_trainer_cls.assert_called_once_with(mock_config_instance, resume=True)
+        mock_trainer_cls.return_value.run.assert_called_once()
 
     @patch("src.train.argparse.ArgumentParser.parse_args")
     @patch("src.train.MambaTrainer")

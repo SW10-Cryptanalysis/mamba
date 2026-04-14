@@ -10,15 +10,20 @@ from src.engine.trainer import MambaTrainer
 def mock_config(tmp_path):
     """Provides a basic mock configuration."""
     config = MagicMock()
+    sched_mock = MagicMock()
     config.save_path = tmp_path / "normal" / "run_1"
     config.outputs_dir = tmp_path / "normal"
     config.use_spaces = False
-    config.epochs = 1
-    config.batch_size = 4
-    config.grad_accum = 1
-    config.learning_rate = 1e-4
     config.save_step = 10
     config.pad_token_id = 0
+    sched_mock.lr_scheduler_type = "cosine"
+    sched_mock.learning_rate = 5e-4
+    sched_mock.warmup_ratio = 0.1
+    sched_mock.weight_decay = 0.1
+    sched_mock.grad_accum = 2
+    sched_mock.batch_size = 4
+    sched_mock.epochs = 5
+    config.scheduler_config = sched_mock
     return config
 
 @pytest.fixture
@@ -43,14 +48,14 @@ class TestMambaTrainer:
     @patch("src.engine.trainer.get_last_checkpoint")
     def test_resolve_resume_path_auto(self, mock_config, tmp_path):
         """Test auto-detecting the latest run directory by forcing timestamps."""
-        normal_dir = tmp_path / "normal"
-        normal_dir.mkdir(parents=True)
+        normal_dir = tmp_path
+        normal_dir.mkdir(parents=True, exist_ok=True)
 
-        old_run = normal_dir / "old_run"
-        old_run.mkdir()
+        old_run = normal_dir / "normal_old_run"
+        old_run.mkdir(exist_ok=True)
 
-        new_run = normal_dir / "new_run"
-        new_run.mkdir()
+        new_run = normal_dir / "normal_new_run"
+        new_run.mkdir(exist_ok=True)
 
         now = time.time()
         os.utime(old_run, (now - 100, now - 100))
@@ -67,7 +72,7 @@ class TestMambaTrainer:
 
             trainer = MambaTrainer(mock_config, resume=True)
 
-            assert "new_run" in str(trainer.save_path)
+            assert "normal_new_run" in str(trainer.save_path)
 
     def test_save_config(self, trainer_with_mocks, tmp_path):
         """Ensure _save_config writes the expected keys to JSON."""

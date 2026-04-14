@@ -55,8 +55,8 @@ class MambaTrainer:
         self.save_path.mkdir(parents=True, exist_ok=True)
         import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
         self._inject_mamba2_kernels()
-        print(
-            f"---NEW FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available} ---"
+        logger.info(
+            f"Fast Path is {mamba2_mod.is_fast_path_available}",
         )
         self.model = get_model(config)
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
@@ -65,16 +65,22 @@ class MambaTrainer:
         self.trainer = self._setup_trainer()
 
     def _inject_mamba2_kernels(self) -> None:
-        """Force-injects Mamba2 CUDA kernels into the transformers modeling namespace."""
+        """Force-injects Mamba2 CUDA kernels."""
         try:
             import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
-            from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-            from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+            from mamba_ssm.ops.triton.selective_state_update import (
+                selective_state_update,
+            )
+            from mamba_ssm.ops.triton.ssd_combined import (
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+            )
             from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 
             mamba2_mod.selective_state_update = selective_state_update
             mamba2_mod.mamba_chunk_scan_combined = mamba_chunk_scan_combined
-            mamba2_mod.mamba_split_conv1d_scan_combined = mamba_split_conv1d_scan_combined
+            mamba2_mod.mamba_split_conv1d_scan_combined = \
+                mamba_split_conv1d_scan_combined
             mamba2_mod.causal_conv1d_fn = causal_conv1d_fn
             mamba2_mod.causal_conv1d_update = causal_conv1d_update
 
@@ -189,7 +195,9 @@ class MambaTrainer:
         if isinstance(resume, str):
             target = Path(resume)
             if not target.exists():
-                raise FileNotFoundError(f"Specified resume path {target} does not exist.")
+                raise FileNotFoundError(
+                    f"Specified resume path {target} does not exist.",
+                )
             return target
 
         prefix = "spaces" if self.cfg.use_spaces else "normal"
@@ -201,7 +209,9 @@ class MambaTrainer:
         subdirs = [d for d in base_dir.glob(f"{prefix}_*") if d.is_dir()]
 
         if not subdirs:
-            raise FileNotFoundError(f"No previous runs found in {base_dir} starting with '{prefix}_'")
+            raise FileNotFoundError(
+                f"No previous runs found in {base_dir} starting with '{prefix}_'",
+            )
 
         latest_run = max(subdirs, key=lambda d: d.stat().st_mtime)
         logger.info(f"Auto-detected latest {prefix} run: {latest_run.name}")
@@ -214,7 +224,9 @@ class MambaTrainer:
         if applicable, and saves the final model and config upon completion.
         """
         import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
-        print(f"--- FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available} ---")
+        logger.info(
+            f"FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available}",
+        )
 
         last_checkpoint = None
 

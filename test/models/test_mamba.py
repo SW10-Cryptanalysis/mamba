@@ -23,7 +23,7 @@ class TestMambaModel:
     @patch("src.models.mamba.Mamba2ForCausalLM")
     def test_get_model_initialization(self, mock_model_cls, mock_asdict, mock_config):
         """Test if the model is initialized with the correct config values."""
-        fake_params = {"vocab_size": 128, "d_model": 256}
+        fake_params = {"vocab_size": 128, "d_model": 256, "use_cache": False}
         mock_asdict.return_value = fake_params
 
         mock_instance = MagicMock()
