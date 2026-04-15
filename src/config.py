@@ -168,13 +168,13 @@ class Config:
     save_step: int = 1000
 
     outputs_dir: Path = Path(__file__).parent.parent / "outputs"
-    data_dir = Path(__file__).parent.parent.parent / "Ciphers"
+    data_dir: Path = Path(__file__).parent.parent.parent / "Ciphers"
     homophone_file: str = "metadata.json"
 
     plain_vocab_size: int = 26
     unique_homophones: int = 2503
     buffer: int = 10
-    pad_token_id = 0
+    pad_token_id: int = 0
 
     @property
     def sep_token_id(self) -> int:
