@@ -1,12 +1,13 @@
 from dataclasses import asdict
 import torch
 from transformers import Mamba2Config, Mamba2ForCausalLM
-from src.config import Config
+from src.config import MambaConfig
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-def get_model(config: Config) -> Mamba2ForCausalLM:
+
+def get_model(config: MambaConfig) -> Mamba2ForCausalLM:
     """Initialize a Mamba2 model with parameters defined in the project configuration.
 
     Args:
@@ -17,12 +18,10 @@ def get_model(config: Config) -> Mamba2ForCausalLM:
         Mamba2ForCausalLM: An initialized Mamba2 model ready for training or inference.
 
     """
-    m_dict = asdict(config.mamba_config)
+    m_dict = asdict(config)
 
-    config = Mamba2Config(
-        **m_dict,
-        torch_dtype=torch.bfloat16,
-    )
+    mamba2_config = Mamba2Config(**m_dict)
+    mamba2_config.torch_dtype = torch.bfloat16
 
     model = Mamba2ForCausalLM(config)
 
