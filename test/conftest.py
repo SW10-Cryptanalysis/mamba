@@ -15,6 +15,8 @@ modules_to_mock = [
     "mamba_ssm.ops.selective_scan_interface",
     "causal_conv1d",
     "causal_conv1d.causal_conv1d_interface",
+    "transformers",
+    "transformers.trainer_utils",
 ]
 
 for mod in modules_to_mock:
