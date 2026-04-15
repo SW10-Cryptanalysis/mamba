@@ -198,7 +198,7 @@ class Config:
 
     @property
     def char_offset(self) -> int:
-        """Character ofset to avoid clashes with defined tokens."""
+        """Character offset to avoid clashes with defined tokens."""
         return self.eos_token_id + 1
 
     @property
