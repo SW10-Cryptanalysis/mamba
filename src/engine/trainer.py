@@ -10,6 +10,7 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 class MambaTrainer:
     """Orchestrates the training pipeline for the Mamba2 cipher model.
 
@@ -54,11 +55,12 @@ class MambaTrainer:
 
         self.save_path.mkdir(parents=True, exist_ok=True)
         import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
+
         self._inject_mamba2_kernels()
         logger.info(
             f"Fast Path is {mamba2_mod.is_fast_path_available}",
         )
-        self.model = get_model(config)
+        self.model = get_model(config.mamba_config)
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
         self.train_ds = CipherPlainData(config, split="Training")
         self.eval_ds = CipherPlainData(config, split="Validation")
@@ -68,19 +70,20 @@ class MambaTrainer:
         """Force-injects Mamba2 CUDA kernels."""
         try:
             import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
-            from mamba_ssm.ops.triton.selective_state_update import (
+            from mamba_ssm.ops.triton.selective_state_update import (  # type: ignore
                 selective_state_update,
             )
-            from mamba_ssm.ops.triton.ssd_combined import (
+            from mamba_ssm.ops.triton.ssd_combined import (  # type: ignore
                 mamba_chunk_scan_combined,
                 mamba_split_conv1d_scan_combined,
             )
-            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update  # type: ignore
 
             mamba2_mod.selective_state_update = selective_state_update
             mamba2_mod.mamba_chunk_scan_combined = mamba_chunk_scan_combined
-            mamba2_mod.mamba_split_conv1d_scan_combined = \
+            mamba2_mod.mamba_split_conv1d_scan_combined = (
                 mamba_split_conv1d_scan_combined
+            )
             mamba2_mod.causal_conv1d_fn = causal_conv1d_fn
             mamba2_mod.causal_conv1d_update = causal_conv1d_update
 
@@ -105,26 +108,22 @@ class MambaTrainer:
             learning_rate=self.cfg.scheduler_config.learning_rate,
             lr_scheduler_type=self.cfg.scheduler_config.lr_scheduler_type,
             warmup_steps=self.cfg.scheduler_config.warmup_ratio,
-
             # Optimization & Precision
             bf16=True,
             tf32=True,
             ddp_find_unused_parameters=False,
             optim="adamw_torch_fused",
             gradient_checkpointing=False,
-
             # Eval & Logging
             eval_strategy="steps",
             eval_steps=self.cfg.save_step,
-            logging_steps=10, # Hardcoded or from config
+            logging_steps=10,  # Hardcoded or from config
             save_steps=self.cfg.save_step,
-
             # Checkpointing
             save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
-
             dataloader_num_workers=4,
             dataloader_pin_memory=True,
         )
@@ -167,8 +166,9 @@ class MambaTrainer:
             save_path (Path): Directory where the config JSON will be saved.
 
         """
-        config_dict = {k: v for k, v in vars(self.cfg).items()
-                       if not k.startswith("__")}
+        config_dict = {
+            k: v for k, v in vars(self.cfg).items() if not k.startswith("__")
+        }
         config_dict["max_len"] = self.cfg.max_len
         config_dict["sep_token_id"] = self.cfg.sep_token_id
         config_dict["space_token_id"] = self.cfg.space_token_id
@@ -176,6 +176,26 @@ class MambaTrainer:
         config_dict["char_offset"] = self.cfg.char_offset
         with open(save_path / "project_config.json", "w") as f:
             json.dump(config_dict, f, indent=4, default=str)
+
+    def _resolve_explicit_resume_path(self, resume_path: str) -> Path:
+        """Resolve and validate an explicitly provided resume path.
+
+        Args:
+            resume_path: The specific path string provided for resuming.
+
+        Returns:
+            Path: The resolved and validated directory path.
+
+        Raises:
+            FileNotFoundError: If the specified path does not exist.
+
+        """
+        target = Path(resume_path)
+        if not target.exists():
+            raise FileNotFoundError(
+                f"Specified resume path {target} does not exist.",
+            )
+        return target
 
     def _resolve_resume_path(self, resume: bool | str) -> Path:
         """Determine the directory path for resuming a previous run.
@@ -193,12 +213,7 @@ class MambaTrainer:
 
         """
         if isinstance(resume, str):
-            target = Path(resume)
-            if not target.exists():
-                raise FileNotFoundError(
-                    f"Specified resume path {target} does not exist.",
-                )
-            return target
+            return self._resolve_explicit_resume_path(resume)
 
         prefix = "spaces" if self.cfg.use_spaces else "normal"
         base_dir = Path(self.cfg.outputs_dir)
@@ -224,6 +239,7 @@ class MambaTrainer:
         if applicable, and saves the final model and config upon completion.
         """
         import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
+
         logger.info(
             f"FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available}",
         )
@@ -244,7 +260,7 @@ class MambaTrainer:
         self.trainer.train(resume_from_checkpoint=last_checkpoint)
 
         final_path = self.save_path / "final_model"
-        self.trainer.save_model(final_path)
+        self.trainer.save_model(final_path)  # type: ignore
 
         self._save_config(final_path)
 
