@@ -1,5 +1,6 @@
 import pytest
 from dataclasses import dataclass
+from typing import Any
 
 from src.config import Config, MambaConfig, CosineSchedulerConfig
 
@@ -16,15 +17,17 @@ class SuccessTestCase:
     expected_sep_token_id: int
     expected_eos_token_id: int
     expected_pad_token_id: int
+    expected_max_len: int
+    expected_save_mode: str
 
 
 @dataclass
 class FailureTestCase:
     """Dataclass defining parameters for failed config initialization."""
 
+    name: str
     file_exception: Exception | None
     json_content: str
-    expected_log_call_count: int
 
 
 @pytest.mark.parametrize(
@@ -38,7 +41,9 @@ class FailureTestCase:
             expected_sep_token_id=101,
             expected_eos_token_id=104,
             expected_pad_token_id=0,
-            expected_vocab_size=105+26+10,
+            expected_vocab_size=141,
+            expected_max_len=20139,
+            expected_save_mode="normal",
         ),
         SuccessTestCase(
             use_spaces=True,
@@ -48,12 +53,15 @@ class FailureTestCase:
             expected_sep_token_id=2504,
             expected_eos_token_id=2507,
             expected_pad_token_id=0,
-            expected_vocab_size=2508+26+10,
+            expected_vocab_size=2544,
+            expected_max_len=26167,
+            expected_save_mode="spaces",
         ),
     ],
+    ids=lambda tc: f"use_spaces_{tc.use_spaces}",
 )
-def test_config_initialization_success(tc: SuccessTestCase, mocker):
-    """Verifies successful loading of properties and dynamic vocabulary sizing."""
+def test_config_initialization_success(tc: SuccessTestCase, mocker: Any) -> None:
+    """Verifies successful loading of properties, dynamic vocabulary sizing, and paths."""
     mocker.patch("builtins.open", mocker.mock_open(read_data=tc.mock_json))
 
     cfg = Config(use_spaces=tc.use_spaces)
@@ -66,29 +74,32 @@ def test_config_initialization_success(tc: SuccessTestCase, mocker):
     assert cfg.mamba_config.pad_token_id == tc.expected_pad_token_id
     assert cfg.char_offset == tc.expected_eos_token_id + 1
     assert cfg.bos_token_id == cfg.space_token_id + 1
+    assert cfg.max_len == tc.expected_max_len
+    assert tc.expected_save_mode in str(cfg.save_path)
 
 
 @pytest.mark.parametrize(
     "tc",
     [
         FailureTestCase(
+            name="os_error_missing_file",
             file_exception=OSError("File missing"),
             json_content="",
-            expected_log_call_count=1,
         ),
         FailureTestCase(
+            name="key_error_wrong_json",
             file_exception=None,
             json_content='{"wrong_key": 100}',
-            expected_log_call_count=1,
         ),
         FailureTestCase(
+            name="value_error_invalid_json",
             file_exception=None,
             json_content="invalid json format",
-            expected_log_call_count=1,
         ),
     ],
+    ids=lambda tc: tc.name,
 )
-def test_config_initialization_failures(tc: FailureTestCase, mocker):
+def test_config_initialization_failures(tc: FailureTestCase, mocker: Any) -> None:
     """Verifies RuntimeError and logging upon missing or invalid homophone data."""
     mock_logger = mocker.patch("src.config.logger.error")
     mock_file = mocker.patch(
@@ -102,10 +113,10 @@ def test_config_initialization_failures(tc: FailureTestCase, mocker):
         Config()
 
     assert "Aborting initialization" in str(exc_info.value)
-    assert mock_logger.call_count == tc.expected_log_call_count
+    assert mock_logger.call_count == 1
 
 
-def test_mamba_config_defaults():
+def test_mamba_config_defaults() -> None:
     """Verifies default initialization fields of MambaConfig."""
     config = MambaConfig()
 
@@ -115,7 +126,7 @@ def test_mamba_config_defaults():
     assert config.hidden_act == "silu"
 
 
-def test_cosine_scheduler_config_defaults():
+def test_cosine_scheduler_config_defaults() -> None:
     """Verifies default initialization fields of CosineSchedulerConfig."""
     config = CosineSchedulerConfig()
 

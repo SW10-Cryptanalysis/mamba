@@ -1,60 +1,85 @@
+from dataclasses import dataclass
+from typing import Any
+
 import pytest
 import torch
-from unittest.mock import MagicMock, patch
-from transformers import Mamba2Config
+
 from src.models.mamba import get_model
 
-@pytest.fixture
-def mock_config():
-    """Mocks the project Config and the nested Mamba2Config dataclass."""
-    config = MagicMock()
 
-    mamba_params = MagicMock()
-    mamba_params.vocab_size = 100
-    mamba_params.d_model = 64
-    mamba_params.n_layer = 2
+@dataclass
+class DummyMambaConfig:
+    """Dummy dataclass to mimic src.config.MambaConfig for asdict extraction."""
 
-    config.mamba_config = mamba_params
-    return config
+    d_model: int
+    n_layer: int
+    vocab_size: int
 
-class TestMambaModel:
 
-    @patch("src.models.mamba.asdict")
-    @patch("src.models.mamba.Mamba2ForCausalLM")
-    def test_get_model_initialization(self, mock_model_cls, mock_asdict, mock_config):
-        """Test if the model is initialized with the correct config values."""
-        fake_params = {"vocab_size": 128, "d_model": 256, "use_cache": False}
-        mock_asdict.return_value = fake_params
+@dataclass
+class GetModelTestCase:
+    """Data structure for testing Mamba model initialization and logging."""
 
-        mock_instance = MagicMock()
-        mock_instance.num_parameters.return_value = 1000000
-        mock_instance.get_memory_footprint.return_value = 4000000
-        mock_model_cls.return_value = mock_instance
+    name: str
+    d_model: int
+    n_layer: int
+    vocab_size: int
+    mock_params: int
+    mock_vram_bytes: int
+    expected_vram_gb: str
 
-        model = get_model(mock_config)
 
-        mock_asdict.assert_called_once_with(mock_config.mamba_config)
+test_cases = [
+    GetModelTestCase(
+        name="small_model",
+        d_model=768,
+        n_layer=24,
+        vocab_size=50277,
+        mock_params=130_000_000,
+        mock_vram_bytes=260_000_000,
+        expected_vram_gb="0.2600",
+    ),
+    GetModelTestCase(
+        name="large_model",
+        d_model=2048,
+        n_layer=48,
+        vocab_size=50277,
+        mock_params=350_000_000,
+        mock_vram_bytes=700_000_000,
+        expected_vram_gb="0.7000",
+    ),
+]
 
-        assert mock_model_cls.called
 
-        called_config = mock_model_cls.call_args[0][0]
-        assert isinstance(called_config, Mamba2Config)
-        assert called_config.use_cache is False
+@pytest.mark.parametrize("case", test_cases, ids=lambda c: c.name)
+def test_get_model(case: GetModelTestCase, mocker: Any) -> None:
+    """Tests the initialization, configuration, and logging of the Mamba2 model."""
+    config = DummyMambaConfig(
+        d_model=case.d_model, n_layer=case.n_layer, vocab_size=case.vocab_size
+    )
 
-        mock_instance.num_parameters.assert_called()
-        assert model == mock_instance
+    mock_mamba2_config_cls = mocker.patch("src.models.mamba.Mamba2Config")
+    mock_mamba2_model_cls = mocker.patch("src.models.mamba.Mamba2ForCausalLM")
+    mock_logger = mocker.patch("src.models.mamba.logger")
 
-    def test_model_dtype(self, mock_config):
-        """A 'semi-integration' test to ensure config object has correct dtype."""
-        with patch("src.models.mamba.Mamba2ForCausalLM") as mock_cls, \
-             patch("src.models.mamba.asdict", return_value={"vocab_size": 10}):
+    mock_model_instance = mock_mamba2_model_cls.return_value
+    mock_model_instance.num_parameters.return_value = case.mock_params
+    mock_model_instance.get_memory_footprint.return_value = case.mock_vram_bytes
 
-            mock_instance = MagicMock()
-            mock_instance.num_parameters.return_value = 1000
-            mock_instance.get_memory_footprint.return_value = 4000
-            mock_cls.return_value = mock_instance
+    result = get_model(config)  # type: ignore
 
-            get_model(mock_config)
+    mock_mamba2_config_cls.assert_called_once_with(
+        d_model=case.d_model, n_layer=case.n_layer, vocab_size=case.vocab_size
+    )
 
-            actual_config = mock_cls.call_args[0][0]
-            assert actual_config.torch_dtype == torch.bfloat16
+    mamba2_config_instance = mock_mamba2_config_cls.return_value
+    assert mamba2_config_instance.torch_dtype == torch.bfloat16
+
+    mock_mamba2_model_cls.assert_called_once_with(mamba2_config_instance)
+    assert result == mock_model_instance
+
+    mock_logger.info.assert_any_call("Mamba2 Model loaded!")
+    mock_logger.info.assert_any_call(f"Parameters:       {case.mock_params:,}")
+    mock_logger.info.assert_any_call(f"VRAM for Weights: {case.expected_vram_gb} GB")
+
+    assert mock_logger.info.call_count == 3

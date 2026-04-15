@@ -1,107 +1,380 @@
-import pytest
 import json
 import os
-import time
+from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from typing import Any
+
+import pytest
+
 from src.engine.trainer import MambaTrainer
 
-@pytest.fixture
-def mock_config(tmp_path):
-    """Provides a basic mock configuration."""
-    config = MagicMock()
-    sched_mock = MagicMock()
-    config.save_path = tmp_path / "normal" / "run_1"
-    config.outputs_dir = tmp_path / "normal"
-    config.use_spaces = False
-    config.save_step = 10
-    config.pad_token_id = 0
-    sched_mock.lr_scheduler_type = "cosine"
-    sched_mock.learning_rate = 5e-4
-    sched_mock.warmup_ratio = 0.1
-    sched_mock.weight_decay = 0.1
-    sched_mock.grad_accum = 2
-    sched_mock.batch_size = 4
-    sched_mock.epochs = 5
-    config.scheduler_config = sched_mock
-    return config
+
+@dataclass
+class SchedulerConfig:
+    """Dummy scheduler configuration."""
+
+    epochs: int = 1
+    batch_size: int = 2
+    grad_accum: int = 1
+    learning_rate: float = 0.001
+    lr_scheduler_type: str = "linear"
+    warmup_ratio: float = 0.1
+
+
+@dataclass
+class MockConfig:
+    """Dummy configuration structure mimicking the real Config."""
+
+    save_path: str
+    outputs_dir: str
+    use_spaces: bool
+    mamba_config: dict
+    pad_token_id: int
+    save_step: int
+    scheduler_config: SchedulerConfig
+    max_len: int = 100
+    sep_token_id: int = 1
+    space_token_id: int = 2
+    eos_token_id: int = 3
+    char_offset: int = 4
+
 
 @pytest.fixture
-def trainer_with_mocks(mock_config):
-    """Instantiates MambaTrainer with mocked external dependencies."""
-    with patch("src.engine.trainer.get_model"), \
-         patch("src.engine.trainer.CipherPlainData"), \
-         patch("src.engine.trainer.PadCollator"), \
-         patch("src.engine.trainer.Trainer"):
+def base_config(tmp_path: Path) -> MockConfig:
+    """Provides a clean instance of MockConfig for each test."""
+    return MockConfig(
+        save_path=str(tmp_path / "save"),
+        outputs_dir=str(tmp_path / "outputs"),
+        use_spaces=False,
+        mamba_config={"d_model": 128},
+        pad_token_id=0,
+        save_step=10,
+        scheduler_config=SchedulerConfig(),
+    )
 
-        trainer = MambaTrainer(mock_config, resume=False)
-        return trainer
 
-class TestMambaTrainer:
+@pytest.fixture(autouse=True)
+def mock_dependencies(mocker: Any) -> dict[str, Any]:
+    """Mocks class-level dependencies and strictly isolates hardware injections."""
+    return {
+        "model": mocker.patch(
+            "src.engine.trainer.get_model", return_value=mocker.Mock()
+        ),
+        "collator": mocker.patch(
+            "src.engine.trainer.PadCollator", return_value=mocker.Mock()
+        ),
+        "data": mocker.patch(
+            "src.engine.trainer.CipherPlainData", return_value=mocker.Mock()
+        ),
+        "trainer": mocker.patch(
+            "src.engine.trainer.Trainer", return_value=mocker.Mock()
+        ),
+        "args": mocker.patch(
+            "src.engine.trainer.TrainingArguments", return_value=mocker.Mock()
+        ),
+        "ckpt": mocker.patch(
+            "src.engine.trainer.get_last_checkpoint", return_value=None
+        ),
+        "inject": mocker.patch("src.engine.trainer.MambaTrainer._inject_mamba2_kernels"),
+    }
 
-    def test_init_fresh_run(self, trainer_with_mocks, mock_config):
-        """Verify that a fresh run initializes paths correctly."""
-        assert not trainer_with_mocks.resume
-        assert trainer_with_mocks.save_path == Path(mock_config.save_path)
-        assert trainer_with_mocks.save_path.exists()
 
-    @patch("src.engine.trainer.get_last_checkpoint")
-    def test_resolve_resume_path_auto(self, mock_config, tmp_path):
-        """Test auto-detecting the latest run directory by forcing timestamps."""
-        normal_dir = tmp_path
-        normal_dir.mkdir(parents=True, exist_ok=True)
+@pytest.fixture
+def trainer_instance(
+    base_config: MockConfig, mock_dependencies: dict[str, Any], tmp_path: Path
+) -> MambaTrainer:
+    """Returns a generic initialized MambaTrainer object."""
+    return MambaTrainer(base_config, resume=False)  # type: ignore
 
-        old_run = normal_dir / "normal_old_run"
-        old_run.mkdir(exist_ok=True)
 
-        new_run = normal_dir / "normal_new_run"
-        new_run.mkdir(exist_ok=True)
+@dataclass
+class InitTestCase:
+    """Data structure for testing MambaTrainer initialization scenarios."""
 
-        now = time.time()
-        os.utime(old_run, (now - 100, now - 100))
-        os.utime(new_run, (now + 100, now + 100))
+    name: str
+    resume: bool | str
+    has_checkpoint: bool
 
-        mock_config.outputs_dir = tmp_path
-        mock_config.use_spaces = False
 
-        with patch("src.engine.trainer.get_model"), \
-             patch("src.engine.trainer.CipherPlainData"), \
-             patch("src.engine.trainer.PadCollator"), \
-             patch("src.engine.trainer.TrainingArguments"), \
-             patch("src.engine.trainer.Trainer"):
+init_cases = [
+    InitTestCase("new_run", False, False),
+    InitTestCase("resume_no_ckpt", True, False),
+    InitTestCase("resume_with_ckpt", True, True),
+]
 
-            trainer = MambaTrainer(mock_config, resume=True)
+@pytest.fixture
+def config_tmp(tmp_path: Path, base_config: MockConfig) -> tuple[MockConfig, Path]:
+    """Creates a temporary config and outputs directory."""
+    return base_config, tmp_path
 
-            assert "normal_new_run" in str(trainer.save_path)
+@pytest.mark.parametrize("case", init_cases, ids=lambda c: c.name)
+def test_init(
+    case: InitTestCase,
+    config_tmp: tuple[MockConfig, Path],
+    mocker: Any,
+    mock_dependencies: dict[str, Any],
+) -> None:
+    """Tests the initialization logic of MambaTrainer including conditional resume paths."""
+    base_config, tmp_path = config_tmp
+    mock_resolve = mocker.patch.object(
+        MambaTrainer, "_resolve_resume_path", return_value=tmp_path / "mock_dir"
+    )
+    mock_load = mocker.patch.object(
+        MambaTrainer, "_load_config", return_value=base_config
+    )
+    mock_setup = mocker.patch.object(
+        MambaTrainer, "_setup_trainer", return_value=mocker.Mock()
+    )
 
-    def test_save_config(self, trainer_with_mocks, tmp_path):
-        """Ensure _save_config writes the expected keys to JSON."""
-        test_dir = tmp_path / "test_save"
-        test_dir.mkdir()
+    if case.has_checkpoint:
+        mocker.patch(
+            "src.engine.trainer.get_last_checkpoint", return_value="some/ckpt/path"
+        )
+    else:
+        mocker.patch("src.engine.trainer.get_last_checkpoint", return_value=None)
 
-        trainer_with_mocks.cfg.test_param = "hello"
-        trainer_with_mocks._save_config(test_dir)
+    trainer = MambaTrainer(base_config, resume=case.resume)  # type: ignore
 
-        config_file = test_dir / "project_config.json"
-        assert config_file.exists()
+    mock_dependencies["inject"].assert_called_once()
+    mock_setup.assert_called_once()
 
-        with open(config_file) as f:
-            data = json.load(f)
-            assert data["test_param"] == "hello"
+    if case.resume:
+        mock_resolve.assert_called_once_with(case.resume)
+        assert trainer.resume is True
+        if case.has_checkpoint:
+            mock_load.assert_called_once_with(base_config, "some/ckpt/path")
+        else:
+            mock_load.assert_not_called()
+    else:
+        mock_resolve.assert_not_called()
+        assert trainer.resume is False
+        assert trainer.save_path == Path(base_config.save_path)
 
-    def test_load_config_sync(self, trainer_with_mocks):
-        """Test that _load_config correctly overwrites current config attributes."""
-        mock_ckpt_path = Path("/fake/path")
-        fake_json = {"learning_rate": 0.99, "epochs": 100}
 
-        with patch("pathlib.Path.exists", return_value=True), \
-             patch("builtins.open", mock_open(read_data=json.dumps(fake_json))):
+def test_setup_trainer(
+    trainer_instance: MambaTrainer, mock_dependencies: dict[str, Any]
+) -> None:
+    """Tests the correct instantiation of Trainer and TrainingArguments using configured fields."""
+    mock_args = mock_dependencies["args"]
+    mock_trainer = mock_dependencies["trainer"]
 
-            synced_cfg = trainer_with_mocks._load_config(trainer_with_mocks.cfg, mock_ckpt_path)
+    mock_args.assert_called_once()
+    kwargs = mock_args.call_args.kwargs
+    assert kwargs["output_dir"] == str(trainer_instance.save_path)
+    assert kwargs["num_train_epochs"] == trainer_instance.cfg.scheduler_config.epochs
+    assert kwargs["bf16"] is True
 
-            assert synced_cfg.learning_rate == 0.99
-            assert synced_cfg.epochs == 100
+    mock_trainer.assert_called_once_with(
+        model=trainer_instance.model,
+        args=mock_args.return_value,
+        train_dataset=trainer_instance.train_ds,
+        eval_dataset=trainer_instance.eval_ds,
+        data_collator=trainer_instance.collator,
+    )
 
-    def test_run_logic(self, trainer_with_mocks):
-        """Verify the sequence of events in the run() method."""
-        trainer_with_mocks.trainer.train = MagicMock()
+
+@dataclass
+class LoadConfigCase:
+    """Data structure for checkpoint configuration synchronization tests."""
+
+    name: str
+    file_exists: bool
+    file_content: dict[str, Any]
+    expected_pad_token_id: int
+
+
+load_cases = [
+    LoadConfigCase(
+        "file_exists_updates",
+        True,
+        {"pad_token_id": 999, "unknown_key": "ignore"},
+        999,
+    ),
+    LoadConfigCase("file_missing_no_update", False, {}, 0),
+]
+
+
+@pytest.mark.parametrize("case", load_cases, ids=lambda c: c.name)
+def test_load_config(
+    case: LoadConfigCase, trainer_instance: MambaTrainer, tmp_path: Path
+) -> None:
+    """Tests synchronization of the Config object from a checkpoint project_config.json file."""
+    ckpt_path = tmp_path / "ckpt"
+    ckpt_path.mkdir()
+
+    if case.file_exists:
+        with open(ckpt_path / "project_config.json", "w") as f:
+            json.dump(case.file_content, f)
+
+    updated_config = trainer_instance._load_config(trainer_instance.cfg, str(ckpt_path))
+
+    assert updated_config.pad_token_id == case.expected_pad_token_id
+
+
+def test_save_config(trainer_instance: MambaTrainer, tmp_path: Path) -> None:
+    """Tests serialization of the current Config object to a JSON file."""
+    trainer_instance._save_config(tmp_path)
+    file_path = tmp_path / "project_config.json"
+
+    assert file_path.exists()
+    with open(file_path) as f:
+        data = json.load(f)
+
+    assert data["max_len"] == trainer_instance.cfg.max_len
+    assert data["save_path"] == trainer_instance.cfg.save_path
+    assert data["pad_token_id"] == trainer_instance.cfg.pad_token_id
+
+
+@dataclass
+class ExplicitResumeCase:
+    """Test cases for explicit resume path resolution."""
+
+    name: str
+    path_name: str
+    should_exist: bool
+    expect_error: bool
+
+    def setup_filesystem(self, tmp_path: Path) -> Path:
+        """Prepares the explicit target directory."""
+        target = tmp_path / self.path_name
+        if self.should_exist:
+            target.mkdir(parents=True, exist_ok=True)
+        return target
+
+
+explicit_cases = [
+    ExplicitResumeCase("explicit_exists", "valid_ckpt", True, False),
+    ExplicitResumeCase("explicit_missing", "missing_ckpt", False, True),
+]
+
+
+@pytest.mark.parametrize("case", explicit_cases, ids=lambda c: c.name)
+def test_resolve_explicit_resume_path(
+    case: ExplicitResumeCase, trainer_instance: MambaTrainer, tmp_path: Path
+) -> None:
+    """Tests resolution when the user provides a specific path string."""
+    target_path = case.setup_filesystem(tmp_path)
+
+    if case.expect_error:
+        with pytest.raises(FileNotFoundError):
+            trainer_instance._resolve_resume_path(str(target_path))
+    else:
+        result = trainer_instance._resolve_resume_path(str(target_path))
+        assert result == target_path
+
+
+@dataclass
+class AutoResumeCase:
+    """Test cases for auto-detecting the latest run directory."""
+
+    name: str
+    use_spaces: bool
+    create_base: bool
+    subdirs: list[str]
+    expected_dir: str | None
+    expect_error: bool
+
+    def setup_filesystem(self, base_path: Path) -> None:
+        """Prepares the target directory structure and modification times."""
+        if not self.create_base:
+            return
+
+        base_path.mkdir(parents=True, exist_ok=True)
+        for idx, dir_name in enumerate(self.subdirs):
+            sub_path = base_path / dir_name
+            sub_path.mkdir()
+            os.utime(sub_path, (100 + idx, 100 + idx))
+
+
+auto_cases = [
+    AutoResumeCase("base_missing", False, False, [], None, True),
+    AutoResumeCase("no_subdirs", False, True, [], None, True),
+    AutoResumeCase(
+        "spaces_prefix",
+        True,
+        True,
+        ["spaces_1", "spaces_2", "normal_1"],
+        "spaces_2",
+        False,
+    ),
+    AutoResumeCase(
+        "normal_prefix",
+        False,
+        True,
+        ["spaces_1", "normal_1", "normal_2"],
+        "normal_2",
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize("case", auto_cases, ids=lambda c: c.name)
+def test_resolve_auto_resume_path(
+    case: AutoResumeCase, trainer_instance: MambaTrainer, tmp_path: Path
+) -> None:
+    """Tests auto-resolution based on configuration and filesystem state."""
+    base_outputs = tmp_path / "outputs"
+    case.setup_filesystem(base_outputs)
+
+    trainer_instance.cfg.use_spaces = case.use_spaces
+    trainer_instance.cfg.outputs_dir = base_outputs
+
+    if case.expect_error:
+        with pytest.raises(FileNotFoundError):
+            trainer_instance._resolve_resume_path(True)
+    else:
+        result = trainer_instance._resolve_resume_path(True)
+        assert case.expected_dir is not None
+        assert result == base_outputs / case.expected_dir
+
+
+@dataclass
+class RunTestCase:
+    """Data structure for testing execution runs based on checkpoint existence."""
+
+    name: str
+    resume: bool
+    has_checkpoint: bool
+    expect_train: bool
+
+
+run_cases = [
+    RunTestCase("resume_with_ckpt", True, True, True),
+    RunTestCase("resume_missing_ckpt", True, False, False),
+    RunTestCase("new_run", False, False, True),
+]
+
+
+@pytest.mark.parametrize("case", run_cases, ids=lambda c: c.name)
+def test_run(case: RunTestCase, trainer_instance: MambaTrainer, mocker: Any) -> None:
+    """Tests the main training run execution logic and saving callbacks."""
+    trainer_instance.resume = case.resume
+    mock_train = mocker.patch.object(trainer_instance.trainer, "train")
+    mock_save_model = mocker.patch.object(trainer_instance.trainer, "save_model")
+    mock_save_config = mocker.patch.object(trainer_instance, "_save_config")
+    mock_logger_error = mocker.patch("src.engine.trainer.logger.error")
+
+    if case.has_checkpoint:
+        mocker.patch("src.engine.trainer.get_last_checkpoint", return_value="some/ckpt")
+    else:
+        mocker.patch("src.engine.trainer.get_last_checkpoint", return_value=None)
+
+    result = trainer_instance.run()
+
+    if not case.expect_train:
+        assert result is None
+        mock_logger_error.assert_called_once_with(
+            "Resume requested but no checkpoint found."
+        )
+        mock_train.assert_not_called()
+    else:
+        if case.resume:
+            mock_train.assert_called_once_with(resume_from_checkpoint="some/ckpt")
+            assert mock_save_config.call_count == 1
+        else:
+            mock_train.assert_called_once_with(resume_from_checkpoint=None)
+            assert mock_save_config.call_count == 2
+
+        mock_save_model.assert_called_once_with(
+            trainer_instance.save_path / "final_model"
+        )
