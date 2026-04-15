@@ -23,7 +23,7 @@ def get_model(config: MambaConfig) -> Mamba2ForCausalLM:
     mamba2_config = Mamba2Config(**m_dict)
     mamba2_config.torch_dtype = torch.bfloat16
 
-    model = Mamba2ForCausalLM(config)
+    model = Mamba2ForCausalLM(mamba2_config)
 
     logger.info("Mamba2 Model loaded!")
     logger.info(f"Parameters:       {model.num_parameters():,}")
