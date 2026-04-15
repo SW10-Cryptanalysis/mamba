@@ -27,21 +27,23 @@ class TestCipherPlainData:
     @patch("src.data.dataset.load_from_disk")
     def test_init_success(self, mock_load, mock_config):
         """Test if dataset initializes correctly when path exists."""
+        expected_path = mock_config.tokenized_dir / "Training"
+
         with patch.object(Path, "exists", return_value=True):
             mock_load.return_value = range(10)
 
-            ds = CipherPlainData(mock_config, split="Training")
+            ds = CipherPlainData(mock_config.tokenized_dir, split="Training")
 
-            assert ds.path == mock_config.tokenized_dir / "Training"
+            mock_load.assert_called_once_with(str(expected_path))
             assert len(ds) == 10
-            mock_load.assert_called_once_with(str(ds.path))
 
     def test_init_file_not_found(self, mock_config):
         """Test if it raises FileNotFoundError when path is missing."""
+        path = mock_config.tokenized_dir / "Training"
         with patch.object(Path, "exists", return_value=False), \
              pytest.raises(FileNotFoundError, match="run preprocess.py first"):
 
-            CipherPlainData(mock_config, split="Validation")
+            CipherPlainData(path, split="Validation")
 
     @patch("src.data.dataset.load_from_disk")
     def test_getitem(self, mock_load, mock_config, mock_dataset_content):

@@ -1,7 +1,7 @@
 from typing import TypedDict
 from torch.utils.data import Dataset
+from pathlib import Path
 from datasets import load_from_disk
-from src.config import Config
 
 class CipherPlainDataItem(TypedDict):
     """TypedDict for CipherPlainDataItem."""
@@ -16,30 +16,26 @@ class CipherPlainData(Dataset):
     iterate over the ciphertext-plaintext pairs in the Ciphers dataset.
 
     Attributes:
-        config (Config): The config object containing the dataset parameters.
-        sep_token (int): The token ID for the separator token.
-        char_offset (int): The offset to add to the character IDs to avoid
-            colliding with the cipher IDs.
+        dataset (Union[Dataset, DatasetDict]): loaded dataset.
 
     """
 
-    def __init__(self, config: Config, split: str = "Training") -> None:
+    def __init__(self, dataset_path: Path, split: str = "Training") -> None:
         """Initialize the CipherPlainData dataset.
 
         Args:
-            config (Config): The config object containing the dataset parameters.
+            dataset_path (Path): Path to the tokenized dataset.
             split (str): The data split to load (e.g., 'Training', 'Test').
 
         """
-        self.config = config
-        self.path = self.config.tokenized_dir / split
+        path = dataset_path / split
 
-        if not self.path.exists():
+        if not path.exists():
             raise FileNotFoundError(
-                f"Missing Arrow Data: {self.path} - run preprocess.py first.",
+                f"Missing Arrow Data: {path} - run preprocess.py first.",
             )
 
-        self.dataset = load_from_disk(str(self.path))
+        self.dataset = load_from_disk(str(path))
 
     def __len__(self) -> int:
         """Get the length of the dataset.

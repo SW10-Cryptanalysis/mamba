@@ -32,12 +32,12 @@ class MockConfig:
     pad_token_id: int
     save_step: int
     scheduler_config: SchedulerConfig
+    tokenized_dir: Path
     max_len: int = 100
     sep_token_id: int = 1
     space_token_id: int = 2
     eos_token_id: int = 3
     char_offset: int = 4
-
 
 @pytest.fixture
 def base_config(tmp_path: Path) -> MockConfig:
@@ -50,6 +50,7 @@ def base_config(tmp_path: Path) -> MockConfig:
         pad_token_id=0,
         save_step=10,
         scheduler_config=SchedulerConfig(),
+        tokenized_dir = tmp_path / "tokenized"
     )
 
 

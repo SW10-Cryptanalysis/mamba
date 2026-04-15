@@ -60,10 +60,11 @@ class MambaTrainer:
         logger.info(
             f"Fast Path is {mamba2_mod.is_fast_path_available}",
         )
+        dataset_path = self.cfg.tokenized_dir
         self.model = get_model(config.mamba_config)
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
-        self.train_ds = CipherPlainData(config, split="Training")
-        self.eval_ds = CipherPlainData(config, split="Validation")
+        self.train_ds = CipherPlainData(dataset_path, split="Training")
+        self.eval_ds = CipherPlainData(dataset_path, split="Validation")
         self.trainer = self._setup_trainer()
 
     def _inject_mamba2_kernels(self) -> None: # pragma: no cover
