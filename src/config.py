@@ -178,7 +178,7 @@ class Config:
 
     @property
     def sep_token_id(self) -> int:
-        """Seperator token."""
+        """Separator token."""
         return self.unique_homophones + 1
 
     @property
