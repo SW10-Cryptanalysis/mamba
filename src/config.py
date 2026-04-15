@@ -6,6 +6,9 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+BASE_SEQ_LEN_NORMAL = 10063
+BASE_SEQ_LEN_SPACES = 13077
+
 @dataclass
 class MambaConfig:
     r"""Configuration class for the Mamba2 model.
@@ -211,8 +214,8 @@ class Config:
     def max_len(self) -> int:
         """Max len based on with or without spaces."""
         return (
-            13077 * 2 + 3 + self.buffer if self.use_spaces
-            else 10063 * 2 + 3 + self.buffer
+            BASE_SEQ_LEN_SPACES * 2 + 3 + self.buffer if self.use_spaces
+            else BASE_SEQ_LEN_NORMAL * 2 + 3 + self.buffer
         )
 
     @property
