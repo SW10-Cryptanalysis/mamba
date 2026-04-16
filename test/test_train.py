@@ -1,42 +1,47 @@
-import os
-import json
-from unittest.mock import mock_open, patch
-from src.train import process_json, CipherDataset
+from unittest.mock import MagicMock, patch
+from src.train import main
 
-def test_process_json_list_input():
-    """Verify it handles 'ciphertext' as a list of integers."""
-    mock_data = {
-        "ciphertext": [1, 5, 10, 2],
-        "length": 4
-    }
-    mock_json = json.dumps(mock_data)
+class TestTrainScript:
 
-    with patch("builtins.open", mock_open(read_data=mock_json)):
-        length, max_val = process_json("fake_path.json")
+    @patch("src.train.argparse.ArgumentParser.parse_args")
+    @patch("src.train.Config")
+    @patch("src.train.MambaTrainer")
+    def test_train_main_flow(self, mock_trainer_cls, mock_config_cls, mock_parse_args):
 
-    assert length == 4
-    assert max_val == 10
+        mock_args = MagicMock()
+        mock_args.spaces = True
+        mock_args.resume = True
+        mock_parse_args.return_value = mock_args
 
-def test_cipher_dataset_padding():
-    """Verify that the dataset correctly pads and truncates tensors."""
-    temp_dir = "temp_test_data"
-    os.makedirs(temp_dir, exist_ok=True)
-    file_path = os.path.join(temp_dir, "sample.json")
+        mock_config_instance = mock_config_cls.return_value
 
-    with open(file_path, "w") as f:
-        json.dump({
-            "ciphertext": "1 2 3",
-            "plaintext": "abc"
-        }, f)
+        main()
 
-    dataset = CipherDataset(temp_dir, max_seq_len=5)
-    cipher, plain = dataset[0]
+        mock_config_cls.assert_called_once_with(use_spaces=True)
 
-    assert cipher.shape[0] == 5
-    assert cipher[3] == 0
-    offset = dataset.char_offset
-    expected_plain = [0 + offset, 1 + offset, 2 + offset, 0, 0]
-    assert plain.tolist() == expected_plain
+        mock_config_instance.load_homophones.assert_called_once()
 
-    os.remove(file_path)
-    os.rmdir(temp_dir)
+        mock_trainer_cls.assert_called_once_with(mock_config_instance, resume=True)
+        mock_trainer_cls.return_value.run.assert_called_once()
+
+    @patch("src.train.argparse.ArgumentParser.parse_args")
+    @patch("src.train.MambaTrainer")
+    def test_train_resume_with_path(self, mock_trainer_cls, mock_parse_args):
+        """Tests that a specific path string is passed correctly to the trainer."""
+
+        mock_args = MagicMock()
+        mock_args.spaces = False
+        mock_args.resume = "./outputs/normal/run_2024"
+        mock_parse_args.return_value = mock_args
+
+        with patch("src.train.Config"):
+            main()
+
+            mock_trainer_cls.assert_called_once()
+            _, kwargs = mock_trainer_cls.call_args
+            assert kwargs["resume"] == "./outputs/normal/run_2024"
+
+    def test_pytorch_alloc_conf_set(self):
+        """Verifies the environment variable for memory management is set."""
+        import os
+        assert os.environ.get("PYTORCH_ALLOC_CONF") == "expandable_segments:True"
