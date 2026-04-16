@@ -1,98 +1,85 @@
+from dataclasses import dataclass
+from typing import Any
+
 import pytest
 import torch
-import torch.nn as nn
-from dataclasses import dataclass
-from unittest.mock import MagicMock
 
-from src.config import Config
-from src.models.mamba import MambaModel
+from src.models.mamba import get_model
 
 
 @dataclass
-class MambaModelTestCase:
-    """Dataclass for MambaModel test parameters."""
+class DummyMambaConfig:
+    """Dummy dataclass to mimic src.config.MambaConfig for asdict extraction."""
+
+    d_model: int
+    n_layer: int
+    vocab_size: int
+
+
+@dataclass
+class GetModelTestCase:
+    """Data structure for testing Mamba model initialization and logging."""
 
     name: str
+    d_model: int
+    n_layer: int
     vocab_size: int
-    char_offset: int
-    batch_size: int
-    seq_len: int
-    use_inference_params: bool
+    mock_params: int
+    mock_vram_bytes: int
+    expected_vram_gb: str
 
 
-@pytest.fixture
-def mock_config():
-    """Fixture providing a standard model configuration."""
-    config = MagicMock(spec=Config)
-    config.d_model = 128
-    config.d_state = 16
-    config.d_conv = 4
-    config.expand = 2
-    config.n_layers = 2
-    return config
+test_cases = [
+    GetModelTestCase(
+        name="small_model",
+        d_model=768,
+        n_layer=24,
+        vocab_size=50277,
+        mock_params=130_000_000,
+        mock_vram_bytes=260_000_000,
+        expected_vram_gb="0.2600",
+    ),
+    GetModelTestCase(
+        name="large_model",
+        d_model=2048,
+        n_layer=48,
+        vocab_size=50277,
+        mock_params=350_000_000,
+        mock_vram_bytes=700_000_000,
+        expected_vram_gb="0.7000",
+    ),
+]
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        MambaModelTestCase(
-            name="standard_forward_pass",
-            vocab_size=1000,
-            char_offset=500,
-            batch_size=2,
-            seq_len=16,
-            use_inference_params=False,
-        ),
-        MambaModelTestCase(
-            name="incremental_inference_pass",
-            vocab_size=1000,
-            char_offset=500,
-            batch_size=1,
-            seq_len=1,
-            use_inference_params=True,
-        ),
-    ],
-    ids=lambda x: x.name,
-)
-def test_mamba_model_lifecycle(mocker, mock_config, case: MambaModelTestCase):
-    """Verify initialization, layer structure, and forward pass flow."""
-
-    mock_mixer = mocker.patch(
-        "src.models.mamba.Mamba2", return_value=mocker.MagicMock(spec=nn.Module)
-    )
-    mock_norm = mocker.patch(
-        "src.models.mamba.RMSNorm", return_value=mocker.MagicMock(spec=nn.Module)
+@pytest.mark.parametrize("case", test_cases, ids=lambda c: c.name)
+def test_get_model(case: GetModelTestCase, mocker: Any) -> None:
+    """Tests the initialization, configuration, and logging of the Mamba2 model."""
+    config = DummyMambaConfig(
+        d_model=case.d_model, n_layer=case.n_layer, vocab_size=case.vocab_size
     )
 
-    def mock_mixer_forward(x, inference_params=None):
-        """Simulate mixer output maintaining input shape."""
-        return x
+    mock_mamba2_config_cls = mocker.patch("src.models.mamba.Mamba2Config")
+    mock_mamba2_model_cls = mocker.patch("src.models.mamba.Mamba2ForCausalLM")
+    mock_logger = mocker.patch("src.models.mamba.logger")
 
-    def mock_norm_forward(x):
-        """Simulate norm output maintaining input shape."""
-        return x
+    mock_model_instance = mock_mamba2_model_cls.return_value
+    mock_model_instance.num_parameters.return_value = case.mock_params
+    mock_model_instance.get_memory_footprint.return_value = case.mock_vram_bytes
 
-    mock_mixer.return_value.side_effect = mock_mixer_forward
-    mock_norm.return_value.side_effect = mock_norm_forward
+    result = get_model(config)  # type: ignore
 
-    model = MambaModel(
-        vocab_size=case.vocab_size, char_offset=case.char_offset, config=mock_config
+    mock_mamba2_config_cls.assert_called_once_with(
+        d_model=case.d_model, n_layer=case.n_layer, vocab_size=case.vocab_size
     )
 
-    assert model.char_offset == case.char_offset
-    assert len(model.layers) == mock_config.n_layers
-    assert isinstance(model.embedding, nn.Embedding)
-    assert isinstance(model.lm_head, nn.Linear)
+    mamba2_config_instance = mock_mamba2_config_cls.return_value
+    assert mamba2_config_instance.torch_dtype == torch.bfloat16
 
-    input_ids = torch.randint(0, case.vocab_size, (case.batch_size, case.seq_len))
-    inf_params = mocker.Mock() if case.use_inference_params else None
+    mock_mamba2_model_cls.assert_called_once_with(mamba2_config_instance)
+    assert result == mock_model_instance
 
-    logits = model.forward(input_ids, inference_params=inf_params)
+    mock_logger.info.assert_any_call("Mamba2 Model loaded!")
+    mock_logger.info.assert_any_call(f"Parameters:       {case.mock_params:,}")
+    mock_logger.info.assert_any_call(f"VRAM for Weights: {case.expected_vram_gb} GB")
 
-    assert logits.shape == (case.batch_size, case.seq_len, case.vocab_size)
-
-    assert mock_mixer.call_count == mock_config.n_layers
-    for _ in range(mock_config.n_layers):
-        mock_mixer.return_value.assert_any_call(mocker.ANY, inference_params=inf_params)
-
-    assert mock_norm.call_count == mock_config.n_layers + 1
+    assert mock_logger.info.call_count == 3

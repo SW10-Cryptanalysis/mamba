@@ -1,90 +1,252 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+import json
+from src.utils.logging import get_logger
 
-TEXT_LEN = 9961
-TOTAL_SEQ = TEXT_LEN * 2 + 3
+logger = get_logger(__name__)
+
+BASE_SEQ_LEN_NORMAL = 10063
+BASE_SEQ_LEN_SPACES = 13077
+
+@dataclass
+class MambaConfig:
+    r"""Configuration class for the Mamba2 model.
+
+    Attributes:
+        num_heads (int): Number of SSM heads, analogous to the number of heads in
+            multi-head attention.
+        head_dim (int): Dimensionality of each individual head.
+        vocab_size (int): Total number of unique tokens in the model's vocabulary
+            (set during post-initialization of parent config).
+        hidden_size (int): The overall model dimension.
+        state_size (int): The latent state dimension for the State Space Model.
+        num_hidden_layers (int): Total number of stacked Mamba2 blocks
+            (depth of the model).
+        layer_norm_epsilon (float): Small constant added for numerical stability during
+            normalization.
+        pad_token_id (int): Index of the padding token in the vocabulary
+            (set during post-initialization of parent config).
+        sep_token_id (int): Index of the separator token in the vocabulary
+            (set during post-initialization of parent config).
+        eos_token_id (int): Index of the end-of-sequence token in the vocabulary
+            (set during post-initialization of parent config).
+        expand (int): The expansion factor for the inner hidden dimension.
+        conv_kernel (int): The kernel size for the 1D convolution layer within the
+            mixer.
+        n_groups (int): Number of groups for the Grouped State Space Diffusion (GSSD)
+            mechanism.
+        use_bias (bool): Whether to include bias terms in the linear projections.
+        use_conv_bias (bool): Whether to include bias terms in the 1D convolution
+            layers.
+        hidden_act (str): The activation function used (e.g., 'silu' or 'swish').
+        initializer_range (float): The standard deviation used for initializing weight
+            matrices.
+        residual_in_fp32 (bool): If True, computes residual connections in float32 for
+            higher precision.
+        time_step_rank (str | int): The rank of the $\Delta$ (time-step) projection;
+            'auto' calculates it based on hidden_size.
+        time_step_min (float): The minimum allowable value for the time-step parameter.
+        time_step_max (float): The maximum allowable value for the time-step parameter.
+        time_step_floor (float): The floor value for time-step initialization.
+        time_step_limit (list[float] | tuple[float, ...]): Bounds used to clip the
+            time-step values.
+        rescale_prenorm_residual (bool): If True, rescales the output projection weights
+            during initialization.
+        use_cache (bool): Whether to maintain a state cache for faster incremental
+            inference.
+        rms_norm (bool): If True, uses Root Mean Square Layer Normalization (RMSNorm)
+            instead of standard LayerNorm.
+        chunk_size (int): The chunk size used for the parallel associative scan;
+            balances memory and speed.
+        tie_word_embeddings (bool): Whether to share the same weights between input and
+            output embeddings.
+
+    """
+
+    num_heads: int = 16
+    head_dim: int = 64
+    vocab_size: int = field(init=False)
+    hidden_size: int = 1024
+    state_size: int = 64
+    num_hidden_layers: int = 8
+    layer_norm_epsilon: float = 1e-5
+    pad_token_id: int = field(init=False)
+    sep_token_id: int = field(init=False)
+    eos_token_id: int = field(init=False)
+    expand: int = 1
+    conv_kernel: int = 4
+    n_groups: int = 8
+    use_bias: bool = False
+    use_conv_bias: bool = True
+    hidden_act: str = "silu"
+    initializer_range: float = 0.1
+    residual_in_fp32: bool = True
+    time_step_rank: str | int = "auto"
+    time_step_min: float = 0.001
+    time_step_max: float = 0.1
+    time_step_floor: float = 1e-4
+    time_step_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
+    rescale_prenorm_residual: bool = False
+    use_cache: bool = False
+    rms_norm: bool = True
+    chunk_size: int = 256
+    tie_word_embeddings: bool = False
+
+
+@dataclass
+class CosineSchedulerConfig:
+    """Hyperparameters for the optimizer and training loop.
+
+    Attributes:
+        learning_rate (float): The learning rate.
+        epochs (int): The number of epochs.
+        patience (int): The patience for early stopping.
+        factor (float): The factor for early stopping.
+        pct_start (float): Percentage of training for LR warmup.
+
+    """
+
+    learning_rate: float = 5e-4
+    lr_scheduler_type: str = "cosine"
+    warmup_ratio: float = 0.1
+    weight_decay: float = 0.1
+    grad_accum: int = 2
+
+    epochs: int = 5
+    batch_size: int = 4
+
 
 @dataclass
 class Config:
-	"""Dataclass for MambaCipherSolver configuration.
+    """Dataclass for MambaCipherSolver configuration.
 
-	Attributes:
-		d_model (int, optional): The size of the model. Defaults to 128.
-		n_layers (int, optional): The number of layers in the model. Defaults to 4.
-		d_state (int, optional): The size of the state. Defaults to 64.
-		d_conv (int, optional): The size of the convolution. Defaults to 4.
-		expand (int, optional): The expansion factor. Defaults to 2.
-		batch_size (int, optional): The batch size. Defaults to 128.
-		learning_rate (float, optional): The learning rate. Defaults to 5e-4.
-		epochs (int, optional): The number of epochs. Defaults to 30.
-		save_step (int): Frequency of intermediate checkpoint saves in steps.
-			Defaults to 5000.
-		patience (int, optional): The patience for early stopping. Defaults to 1.
-		factor (float, optional): The factor for early stopping. Defaults to 0.5.
-		pct_start (float): Percentage of training for LR warmup. Defaults to 0.1.
-		save_path (Path): Directory where model outputs and logs are stored.
-		data_dir (Path): Base directory for all cipher-related data.
-		tok_train_normal (Path): Path to normal pre-tokenized training data.
-		tok_valid_normal (Path): Path to normal pre-tokenized validation data.
-		tok_test_normal (Path): Path to normal pre-tokenized test data.
-		tok_train_spaced (Path): Path to spaced pre-tokenized training data.
-		tok_valid_spaced (Path): Path to spaced pre-tokenized validation data.
-		tok_test_spaced (Path): Path to spaced pre-tokenized test data.
-		homophone_file (str, optional): The name of the homophone file.
-			Defaults to "metadata.json".
-		plain_vocab_size (int, optional): The size of the plain vocabulary.
-			Defaults to 26.
-		unique_homophones (int, optional): The number of unique homophones.
-			Defaults to 500.
-		max_len (int, optional): The maximum length of the dataset.
-		vocab_size (int, optional): The size of the vocabulary. Defaults to 0.
-		buffer (int, optional): The buffer size. Defaults to 1.
+    Attributes:
+        use_spaces (bool, optional): Whether to use spaces or not. Defaults to False.
+        device (str, optional): The device to use for training. Defaults to "cuda".
+        mamba_config (MambaConfig): Configuration for the Mamba model.
+        batch_size (int, optional): The batch size. Defaults to 128.
+        save_step (int): Frequency of intermediate checkpoint saves in steps.
+            Defaults to 5000.
+        save_path (Path): Directory where model outputs and logs are stored.
+        data_dir (Path): Base directory for all cipher-related data.
+        homophone_file (str, optional): The name of the homophone file.
+            Defaults to "metadata.json".
+        plain_vocab_size (int, optional): The size of the plain vocabulary.
+            Defaults to 26.
+        unique_homophones (int, optional): The number of unique homophones.
+            Defaults to 500.
+        max_len (int, optional): The maximum length of the dataset.
+        vocab_size (int, optional): The size of the vocabulary. Defaults to 0.
+        buffer (int, optional): The buffer size. Defaults to 1.
+        pad_token_id (int): The token ID to use for padding. Defaults to 0.
+        sep_token_id (int): The token ID used to separate cipher
+            and plain text.
+        space_token_id (int): The token ID used to separate cipher
+            and plain text.
+        bos_token_id (int): The token ID used to signal the beginning of a sequence.
+        eos_token_id (int): The token ID used to signal the end of a sequence.
+        char_offset (int): The starting index for plaintext character IDs to avoid
+            collisions with cipher homophones.
+        tokenized_dir (Path): The directory containing the tokenized datasets.
 
-	"""
+    Methods:
+        load_homophones(homophone_file: str = "metadata.json"):
+            Load the homophone metadata file and set the unique homophone count.
+            Also sets the MambaConfig vocab_size and token IDs.
+        __post_init__():
+            Post-initialization hook to load homophone metadata.
 
-	d_model: int = 256
-	n_layers: int = 6
-	d_state: int = 32
-	d_conv: int = 4
-	expand: int = 2
 
-	batch_size: int = 8
-	learning_rate: float = 5e-4
-	epochs: int = 10
-	save_step: int = 5000
 
-	patience: int = 2
-	factor: float = 0.5
-	pct_start: float = 0.1
+    """
 
-	save_path: Path = Path(__file__).parent.parent / "outputs"
-	data_dir = Path(__file__).parent.parent.parent / "Ciphers"
-	tok_train_normal: Path = data_dir / "tokenized_normal" / "Training"
-	tok_valid_normal: Path = data_dir / "tokenized_normal" / "Validation"
-	tok_test_normal: Path = data_dir / "tokenized_normal" / "Test"
-	tok_train_spaced: Path = data_dir / "tokenized_spaced" / "Training"
-	tok_valid_spaced: Path = data_dir / "tokenized_spaced" / "Validation"
-	tok_test_spaced: Path = data_dir / "tokenized_spaced" / "Test"
-	homophone_file: str = "metadata.json"
+    use_spaces: bool = False
+    device: str = "cuda"
 
-	plain_vocab_size: int = 26
-	unique_homophones: int = 2503
-	max_len: int = TOTAL_SEQ
-	buffer: int = 50
-	pad_token_id = 0
+    mamba_config: MambaConfig = field(default_factory=MambaConfig)
+    scheduler_config: CosineSchedulerConfig = field(
+        default_factory=CosineSchedulerConfig,
+    )
+    save_step: int = 1000
 
-	sep_token_id = unique_homophones + 1
-	space_token_id = unique_homophones + 2
-	bos_token_id = unique_homophones + 3
-	eos_token_id = unique_homophones + 4
-	char_offset = unique_homophones + 5
+    outputs_dir: Path = Path(__file__).parent.parent / "outputs"
+    data_dir: Path = Path(__file__).parent.parent.parent / "Ciphers"
+    homophone_file: str = "metadata.json"
 
-	@property
-	def vocab_size(self) -> int:
-		"""Calculate the total vocabulary size including offsets and buffer.
+    plain_vocab_size: int = 26
+    unique_homophones: int = 2503
+    buffer: int = 10
+    pad_token_id: int = 0
 
-		Returns:
-			The total integer size of the vocabulary.
+    @property
+    def sep_token_id(self) -> int:
+        """Separator token."""
+        return self.unique_homophones + 1
 
-		"""
-		return self.char_offset + self.plain_vocab_size + self.buffer
+    @property
+    def space_token_id(self) -> int:
+        """Space token."""
+        return self.sep_token_id + 1
+
+    @property
+    def bos_token_id(self) -> int:
+        """Beginning of sequence token."""
+        return self.space_token_id + 1
+
+    @property
+    def eos_token_id(self) -> int:
+        """End of sequence token."""
+        return self.bos_token_id + 1
+
+    @property
+    def char_offset(self) -> int:
+        """Character offset to avoid clashes with defined tokens."""
+        return self.eos_token_id + 1
+
+    @property
+    def tokenized_dir(self) -> Path:
+        """Dynamic path based on whether we use spaces or not."""
+        suffix = "spaced" if self.use_spaces else "normal"
+        return self.data_dir / f"tokenized_{suffix}"
+
+    @property
+    def max_len(self) -> int:
+        """Max len based on with or without spaces."""
+        return (
+            BASE_SEQ_LEN_SPACES * 2 + 3 + self.buffer if self.use_spaces
+            else BASE_SEQ_LEN_NORMAL * 2 + 3 + self.buffer
+        )
+
+    @property
+    def save_path(self) -> Path:
+        """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
+        mode = "spaces" if self.use_spaces else "normal"
+        return self.outputs_dir / f"{mode}_{self._timestamp}"
+
+    def load_homophones(self, homophone_file: str = "metadata.json") -> None:
+        """Load the homophone metadata file and set the unique homophone count."""
+        homophone_path = self.data_dir / homophone_file
+        try:
+            with open(homophone_path) as f:
+                meta = json.load(f)
+                self.unique_homophones = int(meta["max_symbol_id"])
+        except (OSError, ValueError, KeyError) as e:
+            logger.error(
+                f"Critical failure loading {homophone_path}. Metadata is required for "
+                "vocab sizing.",
+            )
+            raise RuntimeError(
+                "Aborting initialization: Invalid or missing homophone metadata.",
+            ) from e
+        self.mamba_config.vocab_size = (
+            self.char_offset + self.plain_vocab_size + self.buffer
+        )
+        self.mamba_config.sep_token_id = self.sep_token_id
+        self.mamba_config.eos_token_id = self.eos_token_id
+        self.mamba_config.pad_token_id = self.pad_token_id
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook to load homophone metadata."""
+        self._timestamp = datetime.now().strftime("%d%m_%H%M%S_%Y")
+        self.load_homophones()

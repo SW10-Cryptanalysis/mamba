@@ -1,420 +1,268 @@
-from dataclasses import asdict
 import json
-import shutil
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import math
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 from pathlib import Path
-from datetime import datetime
+from transformers import Trainer, TrainingArguments
+from transformers.trainer_utils import get_last_checkpoint
+from src.models.mamba import get_model
+from src.data.dataset import CipherPlainData
+from src.data.pad_collator import PadCollator
 from src.config import Config
 from src.utils.logging import get_logger
-logger = get_logger("engine/trainer.py")
+
+logger = get_logger(__name__)
+
 
 class MambaTrainer:
-    """Trainer class for Mamba-based cipher models.
+    """Orchestrates the training pipeline for the Mamba2 cipher model.
 
-    This class encapsulates the training loop, validation logic, checkpointing,
-    and learning rate scheduling. It automatically handles experiment directory
-    creation and configuration logging.
+    This class handles environment setup, dataset loading, configuration
+    synchronization with checkpoints, and the execution of the Hugging Face
+    Trainer loop.
 
     Attributes:
-        model (nn.Module): The Mamba model to be trained.
-        train_loader (DataLoader): Iterable for the training dataset.
-        val_loader (DataLoader): Iterable for the validation dataset.
-        config (Config): Configuration object containing hyperparameters.
-        save_path (Path): Base directory where all experiments are saved.
-        exp_dir (Path): Specific directory for the current experiment run.
-        device (str): Computation device (e.g., 'cuda' or 'cpu').
-        criterion (nn.Module): The loss function (CrossEntropyLoss).
-        optimizer (optim.Optimizer): The AdamW optimizer.
-        scheduler (optim.lr_scheduler): Learning rate scheduler.
-        history (dict): Log of losses and learning rates throughout training.
+        cfg: Configuration object containing training hyperparameters.
+        resume (bool): Whether the current run is resuming from a checkpoint.
+        save_path (Path): Directory where checkpoints and logs are stored.
+        model (Mamba2ForCausalLM): The Mamba2 model instance.
+        collator (PadCollator): Data collator for dynamic padding.
+        train_ds (CipherPlainData): Training dataset split.
+        eval_ds (CipherPlainData): Validation dataset split.
+        trainer (Trainer): The initialized Hugging Face Trainer instance.
 
     """
 
-    def __init__(
-        self,
-        model: nn.Module,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
-        config: Config,
-        run_type: str = "normal",
-        device: str = "cuda",
-    ) -> None:
-        """Initialize the trainer with model, data, and experimental settings.
+    def __init__(self, config: Config, resume: bool | str) -> None:
+        """Initialize the trainer with config and sets up save/resume paths.
 
         Args:
-            model: The neural network model to train.
-            train_loader: DataLoader providing training samples.
-            val_loader: DataLoader providing validation samples.
-            config: Config instance containing training hyperparameters.
-            run_type: Normal or spaced training,
-            exp_dir: Optional path to an existing experiment directory
-                (used for resuming).
-            device: Device to use for training. Defaults to "cuda".
+            config: Configuration object containing paths and hyperparameters.
+            resume: If True, auto-detects the latest run.
+                If a string, uses that specific directory path.
 
         """
-        self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.config = config
-        self.run_type = run_type
-        self.device = device
-        self.resume_step = 0
+        self.cfg = config
 
-        self.timestamp = datetime.now().strftime("%d%m_%H%M_%Y")
-        self.exp_dir = config.save_path / f"exp_{self.run_type}_{self.timestamp}"
-        self.exp_dir.mkdir(parents=True, exist_ok=True)
-        self._save_config()
+        if resume:
+            self.save_path = self._resolve_resume_path(resume)
+            self.resume = True
 
-        self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=config.learning_rate)
+            last_ckpt = get_last_checkpoint(str(self.save_path))
+            if last_ckpt:
+                logger.info(f"Resuming experiment: {self.save_path.name}")
+                self.cfg = self._load_config(self.cfg, last_ckpt)
+        else:
+            self.save_path = Path(config.save_path)
+            self.resume = False
 
-        self.total_steps = len(self.train_loader) * self.config.epochs
-        self.warmup_steps = int(self.total_steps * 0.1)
-        self.decay_start_step = int(self.total_steps * 0.9)
+        self.save_path.mkdir(parents=True, exist_ok=True)
+        import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
 
-        self.scheduler = optim.lr_scheduler.LambdaLR(
-            self.optimizer,
-            lr_lambda=self._get_wsd_schedule,
+        self._inject_mamba2_kernels()
+        logger.info(
+            f"Fast Path is {mamba2_mod.is_fast_path_available}",
+        )
+        dataset_path = self.cfg.tokenized_dir
+        self.model = get_model(config.mamba_config)
+        self.collator = PadCollator(pad_token_id=config.pad_token_id)
+        self.train_ds = CipherPlainData(dataset_path, split="Training")
+        self.eval_ds = CipherPlainData(dataset_path, split="Validation")
+        self.trainer = self._setup_trainer()
+
+    def _inject_mamba2_kernels(self) -> None: # pragma: no cover
+        """Force-injects Mamba2 CUDA kernels."""
+        try:
+            import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
+            from mamba_ssm.ops.triton.selective_state_update import (  # type: ignore
+                selective_state_update,
+            )
+            from mamba_ssm.ops.triton.ssd_combined import (  # type: ignore
+                mamba_chunk_scan_combined,
+                mamba_split_conv1d_scan_combined,
+            )
+            from causal_conv1d import causal_conv1d_fn, causal_conv1d_update  # type: ignore
+
+            mamba2_mod.selective_state_update = selective_state_update
+            mamba2_mod.mamba_chunk_scan_combined = mamba_chunk_scan_combined
+            mamba2_mod.mamba_split_conv1d_scan_combined = (
+                mamba_split_conv1d_scan_combined
+            )
+            mamba2_mod.causal_conv1d_fn = causal_conv1d_fn
+            mamba2_mod.causal_conv1d_update = causal_conv1d_update
+
+            mamba2_mod.is_fast_path_available = True
+
+            logger.info("Mamba2 Kernel Injection Successful: Fast Path Forced.")
+        except Exception as e:
+            logger.error(f"Mamba2 Kernel Injection failed: {e}")
+
+    def _setup_trainer(self) -> Trainer:
+        """Configure the Hugging Face TrainingArguments and Trainer.
+
+        Returns:
+            Trainer: A fully configured Hugging Face Trainer.
+
+        """
+        args = TrainingArguments(
+            output_dir=str(self.save_path),
+            num_train_epochs=self.cfg.scheduler_config.epochs,
+            per_device_train_batch_size=self.cfg.scheduler_config.batch_size,
+            gradient_accumulation_steps=self.cfg.scheduler_config.grad_accum,
+            learning_rate=self.cfg.scheduler_config.learning_rate,
+            lr_scheduler_type=self.cfg.scheduler_config.lr_scheduler_type,
+            warmup_steps=self.cfg.scheduler_config.warmup_ratio,
+            # Optimization & Precision
+            bf16=True,
+            tf32=True,
+            ddp_find_unused_parameters=False,
+            optim="adamw_torch_fused",
+            gradient_checkpointing=False,
+            # Eval & Logging
+            eval_strategy="steps",
+            eval_steps=self.cfg.save_step,
+            logging_steps=10,  # Hardcoded or from config
+            save_steps=self.cfg.save_step,
+            # Checkpointing
+            save_total_limit=2,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
+            dataloader_num_workers=4,
+            dataloader_pin_memory=True,
         )
 
-        self.history = {"train_loss": [], "val_loss": [], "learning_rates": []}
-
-        self.best_val_loss = float("inf")
-        self.current_epoch = 0
-
-        total, trainable = self.count_parameters(self.model)
-        logger.info(f"Total Parameters: {total:,}")
-        logger.info(f"Trainable Parameters: {trainable:,}")
-
-    def _get_wsd_schedule(self, current_step: int) -> float:
-        """Calculate the LR multiplier for Warmup-Stable-Decay.
-
-        Args:
-            current_step: How many steps of training have passed.
-
-        """
-        if current_step < self.warmup_steps:
-            return float(current_step) / float(max(1, self.warmup_steps))
-
-        if current_step < self.decay_start_step:
-            return 1.0
-
-        progress = float(current_step - self.decay_start_step) / float(
-            max(1, self.total_steps - self.decay_start_step),
+        return Trainer(
+            model=self.model,
+            args=args,
+            train_dataset=self.train_ds,
+            eval_dataset=self.eval_ds,
+            data_collator=self.collator,
         )
 
-        return 0.5 * (1.0 + math.cos(math.pi * progress))
-
-    def _save_config(self) -> None:
-        """Save the current configuration to a JSON file."""
-        config_path = self.exp_dir / "config.json"
-        with open(config_path, "w") as f:
-            json.dump(asdict(self.config), f, indent=4, default=str)
-        logger.info(f"Experiment config saved to {config_path}")
-
-    def _save_history(self) -> None:
-        """Save the current training history to a JSON file."""
-        history_path = self.exp_dir / "history.json"
-        with open(history_path, "w") as f:
-            json.dump(self.history, f, indent=4)
-        logger.info(f"History updated at {history_path}")
-
-    def _save_checkpoint(
-        self,
-        val_loss: float,
-        is_best: bool,
-        suffix: str | None = None,
-    ) -> None:
-        """Save a model checkpoint.
+    def _load_config(self, current_config: Config, checkpoint_path: str) -> Config:
+        """Overwrite current_config with values found in a checkpoint directory.
 
         Args:
-            val_loss: Current loss.
-            is_best: If true, copies to best.pth.
-            suffix: Optional string (e.g., 'step_5000') for intra-epoch saves.
+            current_config: The current in-memory config object.
+            checkpoint_path (Union[str, Path]): Path to the checkpoint folder
+                containing 'project_config.json'.
+
+        Returns:
+            Any: The synchronized configuration object.
 
         """
-        state = {
-            "epoch": self.current_epoch,
-            "step": getattr(self, "current_step", 0),
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "scheduler_state_dict": self.scheduler.state_dict(),
-            "val_loss": val_loss,
-            "char_offset": self.model.char_offset,
-            "d_model": self.config.d_model,
-            "n_layers": self.config.n_layers,
+        config_file = Path(checkpoint_path) / "project_config.json"
+        if config_file.exists():
+            with open(config_file) as f:
+                saved_data = json.load(f)
+
+            for key, value in saved_data.items():
+                if hasattr(current_config, key):
+                    setattr(current_config, key, value)
+            logger.info("Config successfully synchronized with checkpoint state.")
+        return current_config
+
+    def _save_config(self, save_path: Path) -> None:
+        """Serialize the current Config object to a JSON file.
+
+        Args:
+            save_path (Path): Directory where the config JSON will be saved.
+
+        """
+        config_dict = {
+            k: v for k, v in vars(self.cfg).items() if not k.startswith("__")
         }
+        config_dict["max_len"] = self.cfg.max_len
+        config_dict["sep_token_id"] = self.cfg.sep_token_id
+        config_dict["space_token_id"] = self.cfg.space_token_id
+        config_dict["eos_token_id"] = self.cfg.eos_token_id
+        config_dict["char_offset"] = self.cfg.char_offset
+        with open(save_path / "project_config.json", "w") as f:
+            json.dump(config_dict, f, indent=4, default=str)
 
-        base_name = f"epoch_{self.current_epoch:03d}"
-        if suffix:
-            base_name += f"_{suffix}"
+    def _resolve_explicit_resume_path(self, resume_path: str) -> Path:
+        """Resolve and validate an explicitly provided resume path.
 
-        epoch_filename = f"{base_name}.pth"
-        epoch_path = self.exp_dir / epoch_filename
-        torch.save(state, epoch_path)
+        Args:
+            resume_path: The specific path string provided for resuming.
 
-        latest_path = self.exp_dir / "latest.pth"
-        shutil.copyfile(epoch_path, latest_path)
+        Returns:
+            Path: The resolved and validated directory path.
 
-        if is_best and not suffix:
-            best_path = self.exp_dir / "best.pth"
-            shutil.copyfile(epoch_path, best_path)
-            logger.info(
-                f"Updated best model at epoch {self.current_epoch} "
-                f"(Loss: {val_loss:.4f})",
+        Raises:
+            FileNotFoundError: If the specified path does not exist.
+
+        """
+        target = Path(resume_path)
+        if not target.exists():
+            raise FileNotFoundError(
+                f"Specified resume path {target} does not exist.",
+            )
+        return target
+
+    def _resolve_resume_path(self, resume: bool | str) -> Path:
+        """Determine the directory path for resuming a previous run.
+
+        Args:
+            resume: Either a specific path string or a
+                boolean indicating auto-detection is required.
+
+        Returns:
+            Path: The resolved directory path.
+
+        Raises:
+            FileNotFoundError: If the specified path or auto-detected base
+                directory does not exist.
+
+        """
+        if isinstance(resume, str):
+            return self._resolve_explicit_resume_path(resume)
+
+        prefix = "spaces" if self.cfg.use_spaces else "normal"
+        base_dir = Path(self.cfg.outputs_dir)
+
+        if not base_dir.exists():
+            raise FileNotFoundError(f"Base output directory {base_dir} does not exist.")
+
+        subdirs = [d for d in base_dir.glob(f"{prefix}_*") if d.is_dir()]
+
+        if not subdirs:
+            raise FileNotFoundError(
+                f"No previous runs found in {base_dir} starting with '{prefix}_'",
             )
 
-    def load_checkpoint(self, checkpoint_path: Path) -> "MambaTrainer":
-        """Restore the trainer state from a saved checkpoint file.
+        latest_run = max(subdirs, key=lambda d: d.stat().st_mtime)
+        logger.info(f"Auto-detected latest {prefix} run: {latest_run.name}")
+        return latest_run
 
-        Args:
-            checkpoint_path: The filesystem path to the .pth checkpoint file.
+    def run(self) -> None:
+        """Execute the training loop.
 
-        Returns:
-            The MambaTrainer instance (self).
-
+        Handles the initial config save (for new runs), resumes from checkpoints
+        if applicable, and saves the final model and config upon completion.
         """
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
 
-        self.current_epoch = checkpoint["epoch"]
-        self.resume_step = checkpoint.get("step", 0)
-        self.best_val_loss = checkpoint.get("val_loss", float("inf"))
-
-        if "scheduler_state_dict" in checkpoint:
-            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-
-        history_path = self.exp_dir / "history.json"
-        if history_path.exists():
-            with open(history_path) as f:
-                self.history = json.load(f)
-
-        return self
-
-    def train(self, epochs: int) -> None:
-        """Execute the main training loop for a specified number of epochs.
-
-        Args:
-            epochs: The total number of epochs to train for.
-
-        """
-        start_epoch = self.current_epoch
-
-        for epoch in range(start_epoch, epochs):
-            self.current_epoch = epoch
-
-            avg_train_loss = self._train_one_epoch()
-            avg_val_loss = self._validate_one_epoch()
-
-            current_lr = self.optimizer.param_groups[0]["lr"]
-
-            self.history["train_loss"].append(avg_train_loss)
-            self.history["val_loss"].append(avg_val_loss)
-            self.history["learning_rates"].append(current_lr)
-
-            self._save_history()
-
-            logger.info(
-                f"Epoch [{self.current_epoch}/{epochs}] - "
-                f"Train Loss: {avg_train_loss:.4f} | "
-                f"Val Loss: {avg_val_loss:.4f} | LR: {current_lr:.6f}",
-            )
-
-            is_best = avg_val_loss < self.best_val_loss
-            if is_best:
-                self.best_val_loss = avg_val_loss
-
-            self.current_epoch = epoch + 1
-            self._save_checkpoint(avg_val_loss, is_best)
-
-            if current_lr < 1e-7:
-                logger.info("Learning rate too low. Stopping early.")
-                break
-
-    def _train_one_epoch(self) -> float:
-        """Run a single epoch of training, processing batches from the training loader.
-
-        Returns:
-            float: The average training loss across all processed batches in
-                the current epoch.
-
-        """
-        self.model.train()
-        total_loss, batches_processed = 0, 0
-        resume_step = getattr(self, "resume_step", 0)
-
-        loop = tqdm(
-            self.train_loader,
-            desc=f"Epoch {self.current_epoch + 1} [Train]",
-            leave=False,
+        logger.info(
+            f"FINAL VERIFICATION: Fast Path is {mamba2_mod.is_fast_path_available}",
         )
 
-        for i, batch in enumerate(loop):
-            if i < resume_step:
-                continue
+        last_checkpoint = None
 
-            loss_value = self._execute_training_step(batch, i)
-
-            total_loss += loss_value
-            batches_processed += 1
-
-            self._update_training_ui(loop, i, loss_value)
-
-            step = i + 1
-            if step % self.config.save_step == 0:
-                self._handle_intermediate_checkpoint(step, loss_value)
-
-        self.resume_step = 0
-        return total_loss / max(1, batches_processed)
-
-    def _validate_one_epoch(self) -> float:
-        """Evaluate the model on the validation dataset for one epoch.
-
-        Returns:
-            float: The average validation loss across all batches in the
-                validation loader.
-
-        """
-        self.model.eval()
-        total_loss = 0
-        loop = tqdm(
-            self.val_loader,
-            desc=f"Epoch {self.current_epoch} [Val]",
-            leave=False,
-        )
-
-        with torch.no_grad():
-            for batch in loop:
-                with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    loss = self._compute_batch_loss(batch)
-                total_loss += loss.item()
-                loop.set_postfix(loss=loss.item())
-
-        return total_loss / len(self.val_loader)
-
-    def _compute_batch_loss(
-        self,
-        batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor],
-    ) -> torch.Tensor:
-        """Compute the loss for a single batch.
-
-        Args:
-            batch: A batch of data, either as a dictionary containing "input_ids"
-                and "labels", or a tuple/list in the form (input_ids, labels).
-
-        Returns:
-            torch.Tensor: A scalar tensor representing the CrossEntropy loss
-                for the batch.
-
-        """
-        if not isinstance(batch, dict):
-            input_ids, labels = batch
+        if self.resume:
+            last_checkpoint = get_last_checkpoint(str(self.save_path))
+            if last_checkpoint:
+                logger.info(f"Resuming training from {last_checkpoint}.")
+            else:
+                logger.error("Resume requested but no checkpoint found.")
+                return None
         else:
-            input_ids = batch["input_ids"]
-            labels = batch["labels"]
+            logger.info("Starting new training run.")
+            self._save_config(self.save_path)
 
-        input_ids = input_ids.to(self.device)
-        labels = labels.to(self.device)
+        self.trainer.train(resume_from_checkpoint=last_checkpoint)
 
-        logits = self.model(input_ids)
+        final_path = self.save_path / "final_model"
+        self.trainer.save_model(final_path)  # type: ignore
 
-        shift_logits = logits[:, :-1, :].contiguous()
-        shift_labels = labels[:, 1:].contiguous()
+        self._save_config(final_path)
 
-        loss = self.criterion(
-            shift_logits.view(-1, shift_logits.size(-1)),
-            shift_labels.view(-1),
-        )
-        return loss
-
-    def _execute_training_step(
-        self,
-        batch: dict[str, torch.Tensor] | tuple[torch.Tensor, torch.Tensor],
-        step_idx: int,
-    ) -> float:
-        """Execute a single pass for a training batch.
-
-        Args:
-            batch: A batch of data containing "input_ids" and "labels".
-            step_idx: The current iteration index within the current epoch.
-
-        Returns:
-            float: The scalar loss value for the current batch.
-
-        """
-        global_step = (self.current_epoch * len(self.train_loader)) + step_idx
-        self.current_step = step_idx
-
-        self.optimizer.zero_grad()
-
-        with torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16):
-            loss = self._compute_batch_loss(batch)
-
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        self.optimizer.step()
-        self.scheduler.step(global_step)
-
-        return loss.item()
-
-    def _update_training_ui(self, loop: tqdm, step_idx: int, loss: float) -> None:
-        """Calculate the current training phase and updates the progress bar.
-
-        Args:
-            loop: The active tqdm progress bar instance for the training epoch.
-            step_idx: The current iteration index within the current epoch.
-            loss: The scalar loss value from the most recent training step to display.
-
-        """
-        global_step = (self.current_epoch * len(self.train_loader)) + step_idx
-
-        if global_step < self.warmup_steps:
-            phase = "warmup"
-        elif global_step < self.decay_start_step:
-            phase = "stable"
-        else:
-            phase = "decay"
-
-        current_lr = self.optimizer.param_groups[0]["lr"]
-
-        loop.set_postfix({
-            "loss": f"{loss:.3f}",
-            "lr": f"{current_lr:.2e}",
-            "phase": phase,
-        })
-
-    def _handle_intermediate_checkpoint(self, step: int, loss: float) -> None:
-        """Manage the 'sliding window' of checkpoints to save disk space.
-
-        Args:
-            step: The current iteration count (1-indexed) within the epoch.
-            loss: The training loss at the current step, used for checkpoint metadata.
-
-        """
-        prev_step = step - self.config.save_step
-        if prev_step > 0:
-            ckpt_name = f"epoch_{self.current_epoch:03d}_step_{prev_step}.pth"
-            prev_checkpoint = self.exp_dir / ckpt_name
-            if prev_checkpoint.exists():
-                prev_checkpoint.unlink()
-                logger.info(f"Cleanup: Removed {prev_checkpoint.name}")
-
-        logger.info(f"Step {step}: Saving intermediate checkpoint...")
-        self._save_checkpoint(
-            val_loss=loss,
-            is_best=False,
-            suffix=f"step_{step}",
-        )
-
-    def count_parameters(self, model: nn.Module) -> tuple[int, int]:
-        """Count parameters for model."""
-        total_params = sum(p.numel() for p in model.parameters())
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-        return total_params, trainable_params
+        logger.info(f"Model and project config saved to {final_path}")

@@ -1,82 +1,32 @@
+from dataclasses import asdict
 import torch
-import torch.nn as nn
-from mamba_ssm import Mamba2
-from mamba_ssm.ops.triton.layer_norm import RMSNorm
-from mamba_ssm.utils.generation import InferenceParams
-from src.config import Config
+from transformers import Mamba2Config, Mamba2ForCausalLM
+from src.config import MambaConfig
+from src.utils.logging import get_logger
 
-class MambaModel(nn.Module):
-    """Mamba-based sequence model for cipher decryption.
+logger = get_logger(__name__)
 
-    This model uses the Mamba2 architecture to process sequences of cipher
-    homophones and predict the corresponding plaintext characters.
 
-    Attributes:
-        char_offset (int): The index where plaintext characters begin in the vocab.
-        embedding (nn.Embedding): Learnt embeddings for the input tokens.
-        layers (nn.ModuleList): A list of Mamba2 layers with RMSNorm.
-        norm_f (RMSNorm): Final normalization layer before the head.
-        lm_head (nn.Linear): Linear layer mapping hidden states to vocabulary logits.
+def get_model(config: MambaConfig) -> Mamba2ForCausalLM:
+    """Initialize a Mamba2 model with parameters defined in the project configuration.
+
+    Args:
+        config (Config): The global project configuration object containing
+            `mamba_config` (the architecture hyperparameters).
+
+    Returns:
+        Mamba2ForCausalLM: An initialized Mamba2 model ready for training or inference.
 
     """
+    m_dict = asdict(config)
 
-    def __init__(
-        self,
-        vocab_size: int,
-        char_offset: int,
-        config: Config,
-    ) -> None:
-        """Initialize the MambaModel.
+    mamba2_config = Mamba2Config(**m_dict)
+    mamba2_config.torch_dtype = torch.bfloat16
 
-        Args:
-            vocab_size: Total number of tokens in the vocabulary.
-            char_offset: Offset used to separate cipher and plain tokens.
-            config: Configuration object with model hyperparameters.
+    model = Mamba2ForCausalLM(mamba2_config)
 
-        """
-        super().__init__()
-        self.char_offset = char_offset
-        self.embedding = nn.Embedding(vocab_size, config.d_model)
+    logger.info("Mamba2 Model loaded!")
+    logger.info(f"Parameters:       {model.num_parameters():,}")
+    logger.info(f"VRAM for Weights: {(model.get_memory_footprint() / 1e9):.4f} GB")
 
-        self.layers = nn.ModuleList([
-            nn.ModuleDict({
-                "norm": RMSNorm(config.d_model),
-                "mixer": Mamba2(
-                    d_model=config.d_model,
-                    d_state=config.d_state,
-                    d_conv=config.d_conv,
-                    expand=config.expand,
-                    layer_idx=i,
-                ),
-            })
-            for i in range(config.n_layers)
-        ])
-
-        self.norm_f = RMSNorm(config.d_model)
-        self.lm_head = nn.Linear(config.d_model, vocab_size, bias=False)
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        inference_params: InferenceParams = None,
-    ) -> torch.Tensor:
-        """Perform a forward pass through the network.
-
-        Args:
-            x: Input tensor of token IDs with shape (batch_size, seq_len).
-            inference_params: Object containing state information
-                used for efficient incremental inference.
-                If None, a standard dense forward pass is performed.
-
-        Returns:
-            Logits tensor with shape (batch_size, seq_len, vocab_size).
-
-        """
-        x = self.embedding(x)
-        for layer in self.layers:
-            residual = x
-            x = layer["norm"](x)
-            x = layer["mixer"](x, inference_params=inference_params) + residual
-
-        x = self.norm_f(x)
-        return self.lm_head(x)
+    return model

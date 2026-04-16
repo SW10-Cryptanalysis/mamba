@@ -1,61 +1,70 @@
 import pytest
-import torch
-from unittest.mock import patch
-from src.data.dataset import PretokenizedCipherDataset
-from src.data.tokenizer import CipherTokenizer
-from src.config import Config
+from unittest.mock import MagicMock, patch
 from pathlib import Path
+from src.data.dataset import CipherPlainData
 
 @pytest.fixture
-def config():
-    """Test configuration."""
-    conf = Config()
-    conf.unique_homophones = 100
-    conf.max_len = 10
-    return conf
+def mock_config(tmp_path: Path):
+    """Creates a mock config with a unique, secure temporary directory."""
+    config = MagicMock()
+
+    mock_dir = tmp_path / "mock_data"
+    mock_dir.mkdir()
+
+    config.tokenized_dir = mock_dir
+    return config
 
 @pytest.fixture
-def tokenizer(config):
-    return CipherTokenizer(config)
-
-@pytest.fixture
-def mock_arrow_data():
-    """Creates a list of dicts simulating what Arrow returns."""
+def mock_dataset_content():
+    """Mock content that simulate what load_from_disk returns."""
     return [
-        {"input_ids": [1, 2, 3, 101, 106, 107], "labels": [1, 2, 3, 101, 106, 107]},
-        {"input_ids": [10, 20, 101, 110], "labels": [10, 20, 101, 110]},
+        {"input_ids": [1, 10, 11, 2, 20, 21], "labels": [1, 10, 11, 2, 20, 21]},
+        {"input_ids": [1, 50, 2, 60], "labels": [1, 50, 2, 60]},
     ]
 
-@patch("src.data.dataset.load_from_disk")
-def test_dataset_length(mock_load, config, mock_arrow_data):
-    """Verify that the dataset reports the correct number of samples from Arrow."""
-    mock_load.return_value = mock_arrow_data
-    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
+class TestCipherPlainData:
 
-    assert len(dataset) == 2
+    @patch("src.data.dataset.load_from_disk")
+    def test_init_success(self, mock_load, mock_config):
+        """Test if dataset initializes correctly when path exists."""
+        expected_path = mock_config.tokenized_dir / "Training"
 
-@patch("src.data.dataset.load_from_disk")
-def test_dataset_getitem_content(mock_load, config, mock_arrow_data):
-    """Verify __getitem__ returns variable-length tensors as expected."""
-    mock_load.return_value = mock_arrow_data
-    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
+        with patch.object(Path, "exists", return_value=True):
+            mock_load.return_value = range(10)
 
-    batch = dataset[0]
-    input_ids = batch["input_ids"]
-    labels = batch["labels"]
+            ds = CipherPlainData(mock_config.tokenized_dir, split="Training")
 
-    assert isinstance(input_ids, torch.Tensor)
-    assert input_ids.shape[0] == 6
-    assert input_ids.tolist() == [1, 2, 3, 101, 106, 107]
-    assert labels.tolist() == [1, 2, 3, 101, 106, 107]
+            mock_load.assert_called_once_with(str(expected_path))
+            assert len(ds) == 10
 
-@patch("src.data.dataset.load_from_disk")
-def test_dataset_truncation(mock_load, config):
-    """Verify that sequences longer than max_seq_len are truncated."""
-    long_data = [{"input_ids": list(range(20)), "labels": list(range(20))}]
-    mock_load.return_value = long_data
-    dataset = PretokenizedCipherDataset(Path("fake/path"), max_seq_len=10, config=config)
+    def test_init_file_not_found(self, mock_config):
+        """Test if it raises FileNotFoundError when path is missing."""
+        path = mock_config.tokenized_dir / "Training"
+        with patch.object(Path, "exists", return_value=False), \
+             pytest.raises(FileNotFoundError, match="run preprocess.py first"):
 
-    batch = dataset[0]
-    assert batch["input_ids"].shape[0] == 10
-    assert batch["labels"].shape[0] == 10
+            CipherPlainData(path, split="Validation")
+
+    @patch("src.data.dataset.load_from_disk")
+    def test_getitem(self, mock_load, mock_config, mock_dataset_content):
+        """Test if __getitem__ returns the correct TypedDict structure."""
+        with patch.object(Path, "exists", return_value=True):
+            mock_load.return_value = mock_dataset_content
+
+            ds = CipherPlainData(mock_config)
+            item = ds[0]
+
+            assert isinstance(item, dict)
+            assert "input_ids" in item
+            assert "labels" in item
+
+            assert item["input_ids"] == [1, 10, 11, 2, 20, 21]
+            assert item["labels"] == [1, 10, 11, 2, 20, 21]
+
+    @patch("src.data.dataset.load_from_disk")
+    def test_len(self, mock_load, mock_config, mock_dataset_content):
+        """Test the __len__ method."""
+        with patch.object(Path, "exists", return_value=True):
+            mock_load.return_value = mock_dataset_content
+            ds = CipherPlainData(mock_config)
+            assert len(ds) == 2
