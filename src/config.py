@@ -68,7 +68,7 @@ class MambaConfig:
     head_dim: int = 64
     vocab_size: int = field(init=False)
     hidden_size: int = 1024
-    state_size: int = 64
+    state_size: int = 48
     num_hidden_layers: int = 8
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int = field(init=False)
