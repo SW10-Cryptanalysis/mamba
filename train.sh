@@ -39,7 +39,7 @@ fi
 
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
-    v venv --python 3.12
+    uv venv --python 3.12
 fi
 
 # Install project dependencies
