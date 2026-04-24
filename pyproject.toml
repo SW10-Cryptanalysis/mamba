@@ -13,6 +13,7 @@ dependencies = [
     "numpy<2.0.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "easy-logging-formatter>=0.1.1",
     "datasets>=4.6.1",
+    "hf-transfer",
 ]
 
 [project.optional-dependencies]

@@ -37,16 +37,7 @@ if [ "$NUM_GPUS" -gt 1 ]; then
     export NCCL_NET_GDR_LEVEL=SYS
 fi
 
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    uv venv --python 3.12
-fi
-
-# Install project dependencies
-uv pip install -e ".[gpu]"
-
-# Install hf_transfer to enable faster Hugging Face downloads
-uv pip install hf_transfer
+uv sync --extra gpu
 
 MASTER_PORT=$((10000 + $RANDOM % 20000))
 
