@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+import numpy as np
 
 import pytest
 
@@ -40,6 +41,7 @@ class MockConfig:
     eos_token_id: int = 3
     char_offset: int = 4
 
+
 @pytest.fixture
 def base_config(tmp_path: Path) -> MockConfig:
     """Provides a clean instance of MockConfig for each test."""
@@ -52,8 +54,100 @@ def base_config(tmp_path: Path) -> MockConfig:
         pad_token_id=0,
         save_step=10,
         scheduler_config=SchedulerConfig(),
-        tokenized_dir = tmp_path / "tokenized"
+        tokenized_dir=tmp_path / "tokenized",
     )
+
+
+@dataclass
+class MockEvalPrediction:
+    """
+    Mock prediction object.
+    Matches the Hugging Face EvalPrediction where predictions/labels
+    can be raw arrays or tuples of arrays.
+    """
+
+    predictions: np.ndarray | tuple[np.ndarray, ...]
+    label_ids: np.ndarray | tuple[np.ndarray, ...]
+
+
+@dataclass
+class ComputeMappingMetricsTestCase:
+    """Dataclass for testing compute_mapping_metrics."""
+
+    name: str
+    eval_pred: MockEvalPrediction
+    expected: dict[str, float]
+
+
+def create_mock_logits(classes: list[int]) -> np.ndarray:
+    """Creates a (N, 26) logit matrix where the specified classes are winners."""
+    logits = np.zeros((len(classes), 26))
+    for i, cls in enumerate(classes):
+        valid_cls = max(0, min(cls, 25))
+        logits[i, valid_cls] = 1.0
+    return logits
+
+
+compute_mapping_metrics_cases = [
+    ComputeMappingMetricsTestCase(
+        name="perfect_prediction_standard_array",
+        eval_pred=MockEvalPrediction(
+            predictions=create_mock_logits([0, 1, 2]),
+            label_ids=np.array([0, 1, 2]),
+        ),
+        expected={"accuracy": 1.0},
+    ),
+    ComputeMappingMetricsTestCase(
+        name="tuple_predictions_handling",
+        eval_pred=MockEvalPrediction(
+            # Wrapped in tuple: mimics HF returning (logits, hidden_states)
+            predictions=(create_mock_logits([0, 1, 2]),),
+            label_ids=np.array([0, 1, 2]),
+        ),
+        expected={"accuracy": 1.0},
+    ),
+    ComputeMappingMetricsTestCase(
+        name="both_are_tuples",
+        eval_pred=MockEvalPrediction(
+            predictions=(create_mock_logits([0, 5]),),
+            label_ids=(np.array([0, 1]),),
+        ),
+        # Index 0 matches, Index 1 fails. 1/2 = 0.5
+        expected={"accuracy": 0.5},
+    ),
+    ComputeMappingMetricsTestCase(
+        name="with_ignored_indices_and_tuples",
+        eval_pred=MockEvalPrediction(
+            predictions=(create_mock_logits([0, 5, 10]),),
+            label_ids=(np.array([0, 5, -100]),),
+        ),
+        # Two considered, both correct. 2/2 = 1.0
+        expected={"accuracy": 1.0},
+    ),
+    ComputeMappingMetricsTestCase(
+        name="only_ignored_indices",
+        eval_pred=MockEvalPrediction(
+            predictions=create_mock_logits([0, 5, 10]),
+            label_ids=np.array([-100, -100, -100]),
+        ),
+        # All ignored. 0/3 = 0.0
+        expected={"accuracy": 0.0},
+    ),
+]
+
+
+@pytest.mark.parametrize("case", compute_mapping_metrics_cases, ids=lambda c: c.name)
+def test_compute_mapping_metrics(
+    case: ComputeMappingMetricsTestCase, mocker: Any, base_config: MockConfig
+) -> None:
+    """Tests the compute_mapping_metrics function."""
+    mocker.patch("src.engine.trainer.get_mapping_model", return_value=mocker.Mock())
+    base_config.task = "mapping"
+    trainer_instance = MambaTrainer(base_config, resume=False)  # type: ignore
+    assert trainer_instance.compute_metrics is not None
+    result = trainer_instance.compute_metrics(case.eval_pred)  # type: ignore
+
+    assert result == case.expected
 
 
 @pytest.fixture(autouse=True)
@@ -78,7 +172,9 @@ def mock_dependencies(mocker: Any) -> dict[str, Any]:
         "ckpt": mocker.patch(
             "src.engine.trainer.get_last_checkpoint", return_value=None
         ),
-        "inject": mocker.patch("src.engine.trainer.MambaTrainer._inject_mamba2_kernels"),
+        "inject": mocker.patch(
+            "src.engine.trainer.MambaTrainer._inject_mamba2_kernels"
+        ),
     }
 
 
@@ -97,18 +193,29 @@ class InitTestCase:
     name: str
     resume: bool | str
     has_checkpoint: bool
+    task: str = "causal"
+    exception: Exception | None = None
 
 
 init_cases = [
     InitTestCase("new_run", False, False),
     InitTestCase("resume_no_ckpt", True, False),
     InitTestCase("resume_with_ckpt", True, True),
+    InitTestCase(
+        "resume_with_exception",
+        True,
+        False,
+        "wrong",
+        ValueError("Unknown task type: wrong. Use 'causal' or 'mapping'."),
+    ),
 ]
+
 
 @pytest.fixture
 def config_tmp(tmp_path: Path, base_config: MockConfig) -> tuple[MockConfig, Path]:
     """Creates a temporary config and outputs directory."""
     return base_config, tmp_path
+
 
 @pytest.mark.parametrize("case", init_cases, ids=lambda c: c.name)
 def test_init(
@@ -119,6 +226,7 @@ def test_init(
 ) -> None:
     """Tests the initialization logic of MambaTrainer including conditional resume paths."""
     base_config, tmp_path = config_tmp
+    base_config.task = case.task  # type: ignore
     mock_resolve = mocker.patch.object(
         MambaTrainer, "_resolve_resume_path", return_value=tmp_path / "mock_dir"
     )
@@ -135,6 +243,12 @@ def test_init(
         )
     else:
         mocker.patch("src.engine.trainer.get_last_checkpoint", return_value=None)
+
+    if case.exception:
+        with pytest.raises(Exception) as exc_info:
+            MambaTrainer(base_config, resume=case.resume)  # type: ignore
+        assert str(exc_info.value) == str(case.exception)
+        return
 
     trainer = MambaTrainer(base_config, resume=case.resume)  # type: ignore
 
