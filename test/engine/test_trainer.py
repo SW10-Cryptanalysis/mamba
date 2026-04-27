@@ -2,7 +2,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -25,6 +25,7 @@ class SchedulerConfig:
 class MockConfig:
     """Dummy configuration structure mimicking the real Config."""
 
+    task: Literal["causal", "mapping"]
     save_path: str
     outputs_dir: str
     use_spaces: bool
@@ -43,6 +44,7 @@ class MockConfig:
 def base_config(tmp_path: Path) -> MockConfig:
     """Provides a clean instance of MockConfig for each test."""
     return MockConfig(
+        task="causal",
         save_path=str(tmp_path / "save"),
         outputs_dir=str(tmp_path / "outputs"),
         use_spaces=False,
@@ -170,6 +172,7 @@ def test_setup_trainer(
         args=mock_args.return_value,
         train_dataset=trainer_instance.train_ds,
         eval_dataset=trainer_instance.eval_ds,
+        compute_metrics=trainer_instance.compute_metrics,
         data_collator=trainer_instance.collator,
     )
 
