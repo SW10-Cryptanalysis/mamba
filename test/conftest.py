@@ -17,6 +17,7 @@ modules_to_mock = [
     "causal_conv1d.causal_conv1d_interface",
     "transformers",
     "transformers.trainer_utils",
+    "transformers.modeling_outputs",
     "datasets"
 ]
 
