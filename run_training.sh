@@ -11,10 +11,10 @@
 cd /ceph/project/SW10-CausalLM/mamba
 mkdir -p logs
 mkdir -p .triton_cache
-mkdir -p .tmp
+mkdir -p .tmp 
 # Define paths for clarity
 CONTAINER="./pytorch_25.03-py3.sif"
-VENV_DIR="$HOME/.venvs/mamba"
+VENV_DIR="./mamba-2-pt2503"
 MASTER_PORT=$((10000 + $RANDOM % 20000))
 echo "Starting job ${SLURM_JOB_ID} on $(hostname) at $(date)"
 # --- RUN TRAINING INSIDE SINGULARITY ---
