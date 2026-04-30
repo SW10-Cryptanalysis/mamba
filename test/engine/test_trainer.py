@@ -38,8 +38,9 @@ class MockConfig:
     max_len: int = 100
     sep_token_id: int = 1
     space_token_id: int = 2
-    eos_token_id: int = 3
-    char_offset: int = 4
+    eos_token_id: int = 4
+    bos_token_id: int = 3
+    char_offset: int = 5
 
 
 @pytest.fixture

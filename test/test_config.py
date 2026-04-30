@@ -23,6 +23,7 @@ class SuccessTestCase:
     expected_vocab_size: int
     expected_sep_token_id: int
     expected_eos_token_id: int
+    expected_bos_token_id: int
     expected_pad_token_id: int
     expected_max_len: int
     expected_save_mode: str
@@ -48,6 +49,7 @@ class FailureTestCase:
             expected_unique=100,
             expected_sep_token_id=101,
             expected_eos_token_id=104,
+            expected_bos_token_id=103,
             expected_pad_token_id=0,
             expected_vocab_size=141,
             expected_max_len=BASE_SEQ_LEN_NORMAL * 2 + 3 + 10,
@@ -61,6 +63,7 @@ class FailureTestCase:
             expected_unique=2503,
             expected_sep_token_id=2504,
             expected_eos_token_id=2507,
+            expected_bos_token_id=2506,
             expected_pad_token_id=0,
             expected_vocab_size=2544,
             expected_max_len=BASE_SEQ_LEN_SPACES + 2+ 10,
