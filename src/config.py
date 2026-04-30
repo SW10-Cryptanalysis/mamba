@@ -5,9 +5,10 @@ import json
 from src.utils.logging import get_logger
 from dotenv import load_dotenv
 import os
+from typing import Literal
 
 load_dotenv()
-CIPHERS_DIR = os.environ['CIPHERS_DIR']
+CIPHERS_DIR = os.environ["CIPHERS_DIR"]
 
 logger = get_logger(__name__)
 
