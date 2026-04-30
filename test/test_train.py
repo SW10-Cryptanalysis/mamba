@@ -10,6 +10,7 @@ class TestTrainScript:
 
         mock_args = MagicMock()
         mock_args.spaces = True
+        mock_args.task = "causal"
         mock_args.resume = True
         mock_parse_args.return_value = mock_args
 
@@ -17,7 +18,7 @@ class TestTrainScript:
 
         main()
 
-        mock_config_cls.assert_called_once_with(use_spaces=True)
+        mock_config_cls.assert_called_once_with(use_spaces=True, task="causal")
 
         mock_config_instance.load_homophones.assert_called_once()
 

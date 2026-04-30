@@ -1,14 +1,21 @@
 import pytest
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
-from src.config import Config, MambaConfig, CosineSchedulerConfig
+from src.config import (
+    Config,
+    MambaConfig,
+    CosineSchedulerConfig,
+    BASE_SEQ_LEN_NORMAL,
+    BASE_SEQ_LEN_SPACES,
+)
 
 
 @dataclass
 class SuccessTestCase:
     """Dataclass defining parameters for successful config initialization."""
 
+    task: Literal["causal", "mapping"]
     use_spaces: bool
     mock_json: str
     expected_suffix: str
@@ -35,6 +42,7 @@ class FailureTestCase:
     "tc",
     [
         SuccessTestCase(
+            task="causal",
             use_spaces=False,
             mock_json='{"max_symbol_id": 100}',
             expected_suffix="normal",
@@ -44,21 +52,22 @@ class FailureTestCase:
             expected_bos_token_id=103,
             expected_pad_token_id=0,
             expected_vocab_size=141,
-            expected_max_len=20139,
+            expected_max_len=BASE_SEQ_LEN_NORMAL * 2 + 3 + 10,
             expected_save_mode="normal",
         ),
         SuccessTestCase(
+            task="mapping",
             use_spaces=True,
             mock_json='{"max_symbol_id": 2503}',
-            expected_suffix="spaced",
+            expected_suffix="spaced_mapping",
             expected_unique=2503,
             expected_sep_token_id=2504,
             expected_eos_token_id=2507,
             expected_bos_token_id=2506,
             expected_pad_token_id=0,
             expected_vocab_size=2544,
-            expected_max_len=26167,
-            expected_save_mode="spaces",
+            expected_max_len=BASE_SEQ_LEN_SPACES + 2+ 10,
+            expected_save_mode="spaces_mapping",
         ),
     ],
     ids=lambda tc: f"use_spaces_{tc.use_spaces}",
@@ -67,7 +76,7 @@ def test_config_initialization_success(tc: SuccessTestCase, mocker: Any) -> None
     """Verifies successful loading of properties, dynamic vocabulary sizing, and paths."""
     mocker.patch("builtins.open", mocker.mock_open(read_data=tc.mock_json))
 
-    cfg = Config(use_spaces=tc.use_spaces)
+    cfg = Config(use_spaces=tc.use_spaces, task=tc.task)
 
     assert tc.expected_suffix in str(cfg.tokenized_dir)
     assert cfg.unique_homophones == tc.expected_unique

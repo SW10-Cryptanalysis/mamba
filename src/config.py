@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 BASE_SEQ_LEN_NORMAL = 10063
 BASE_SEQ_LEN_SPACES = 13077
 
+
 @dataclass
 class MambaConfig:
     r"""Configuration class for the Mamba2 model.
@@ -167,6 +168,7 @@ class Config:
 
     """
 
+    task: Literal["causal", "mapping"] = "causal"
     use_spaces: bool = False
     device: str = "cuda"
 
@@ -214,20 +216,22 @@ class Config:
     def tokenized_dir(self) -> Path:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaced" if self.use_spaces else "normal"
+        suffix += "_mapping" if self.task == "mapping" else ""
         return self.data_dir / f"tokenized_{suffix}"
 
     @property
     def max_len(self) -> int:
         """Max len based on with or without spaces."""
-        return (
-            BASE_SEQ_LEN_SPACES * 2 + 3 + self.buffer if self.use_spaces
-            else BASE_SEQ_LEN_NORMAL * 2 + 3 + self.buffer
-        )
+        base = BASE_SEQ_LEN_SPACES if self.use_spaces else BASE_SEQ_LEN_NORMAL
+        if self.task == "mapping":
+            return base + 2 + self.buffer
+        return base * 2 + 3 + self.buffer
 
     @property
     def save_path(self) -> Path:
         """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
         mode = "spaces" if self.use_spaces else "normal"
+        mode += "_mapping" if self.task == "mapping" else ""
         return self.outputs_dir / f"{mode}_{self._timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:

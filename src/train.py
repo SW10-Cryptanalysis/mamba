@@ -5,8 +5,9 @@ from src.engine.trainer import MambaTrainer
 
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
-def main() -> None:
-    """Begin the training process."""
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--spaces", action="store_true")
     parser.add_argument(
@@ -15,13 +16,28 @@ def main() -> None:
         const=True,
         help="Resume latest or specify a folder",
     )
-    cmd_args = parser.parse_args()
+    parser.add_argument(
+        "--task",
+        choices=["causal", "mapping"],
+        default="causal",
+        help="The task to train on",
+    )
+    return parser.parse_args()
 
-    config = Config(use_spaces=cmd_args.spaces)
+
+def main() -> None:
+    """Begin the training process."""
+    cmd_args = parse_args()
+
+    config = Config(
+        use_spaces=cmd_args.spaces,
+        task=cmd_args.task,
+    )
     config.load_homophones()
 
     trainer = MambaTrainer(config, resume=cmd_args.resume)
     trainer.run()
+
 
 if __name__ == "__main__":
     main()
