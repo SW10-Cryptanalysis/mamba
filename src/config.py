@@ -3,6 +3,11 @@ from datetime import datetime
 from pathlib import Path
 import json
 from src.utils.logging import get_logger
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+CIPHERS_DIR = os.environ['CIPHERS_DIR']
 
 logger = get_logger(__name__)
 
@@ -74,6 +79,7 @@ class MambaConfig:
     pad_token_id: int = field(init=False)
     sep_token_id: int = field(init=False)
     eos_token_id: int = field(init=False)
+    bos_token_id: int = field(init=False)
     expand: int = 1
     conv_kernel: int = 4
     n_groups: int = 8
@@ -171,7 +177,7 @@ class Config:
     save_step: int = 1000
 
     outputs_dir: Path = Path(__file__).parent.parent / "outputs"
-    data_dir: Path = Path(__file__).parent.parent.parent / "Ciphers-AAU"
+    data_dir: Path = Path(__file__).parent.parent.parent / CIPHERS_DIR
     homophone_file: str = "metadata.json"
 
     plain_vocab_size: int = 26
@@ -244,6 +250,7 @@ class Config:
         )
         self.mamba_config.sep_token_id = self.sep_token_id
         self.mamba_config.eos_token_id = self.eos_token_id
+        self.mamba_config.bos_token_id = self.bos_token_id
         self.mamba_config.pad_token_id = self.pad_token_id
 
     def __post_init__(self) -> None:

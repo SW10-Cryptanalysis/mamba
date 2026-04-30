@@ -180,6 +180,7 @@ class MambaTrainer:
             config_dict["sep_token_id"] = self.cfg.sep_token_id
             config_dict["space_token_id"] = self.cfg.space_token_id
             config_dict["eos_token_id"] = self.cfg.eos_token_id
+            config_dict["bos_token_id"] = self.cfg.bos_token_id
             config_dict["char_offset"] = self.cfg.char_offset
 
             with open(save_path / "project_config.json", "w") as f:

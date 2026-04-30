@@ -16,6 +16,7 @@ class SuccessTestCase:
     expected_vocab_size: int
     expected_sep_token_id: int
     expected_eos_token_id: int
+    expected_bos_token_id: int
     expected_pad_token_id: int
     expected_max_len: int
     expected_save_mode: str
@@ -40,6 +41,7 @@ class FailureTestCase:
             expected_unique=100,
             expected_sep_token_id=101,
             expected_eos_token_id=104,
+            expected_bos_token_id=103,
             expected_pad_token_id=0,
             expected_vocab_size=141,
             expected_max_len=20139,
@@ -52,6 +54,7 @@ class FailureTestCase:
             expected_unique=2503,
             expected_sep_token_id=2504,
             expected_eos_token_id=2507,
+            expected_bos_token_id=2506,
             expected_pad_token_id=0,
             expected_vocab_size=2544,
             expected_max_len=26167,
@@ -71,6 +74,7 @@ def test_config_initialization_success(tc: SuccessTestCase, mocker: Any) -> None
     assert cfg.mamba_config.vocab_size == tc.expected_vocab_size
     assert cfg.mamba_config.sep_token_id == tc.expected_sep_token_id
     assert cfg.mamba_config.eos_token_id == tc.expected_eos_token_id
+    assert cfg.mamba_config.bos_token_id == tc.expected_bos_token_id
     assert cfg.mamba_config.pad_token_id == tc.expected_pad_token_id
     assert cfg.char_offset == tc.expected_eos_token_id + 1
     assert cfg.bos_token_id == cfg.space_token_id + 1
