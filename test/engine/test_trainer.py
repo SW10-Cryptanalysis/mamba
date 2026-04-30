@@ -42,7 +42,6 @@ class MockConfig:
     bos_token_id: int = 3
     char_offset: int = 5
 
-
 @pytest.fixture
 def base_config(tmp_path: Path) -> MockConfig:
     """Provides a clean instance of MockConfig for each test."""

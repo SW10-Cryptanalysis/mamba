@@ -83,6 +83,7 @@ def test_config_initialization_success(tc: SuccessTestCase, mocker: Any) -> None
     assert cfg.mamba_config.vocab_size == tc.expected_vocab_size
     assert cfg.mamba_config.sep_token_id == tc.expected_sep_token_id
     assert cfg.mamba_config.eos_token_id == tc.expected_eos_token_id
+    assert cfg.mamba_config.bos_token_id == tc.expected_bos_token_id
     assert cfg.mamba_config.pad_token_id == tc.expected_pad_token_id
     assert cfg.char_offset == tc.expected_eos_token_id + 1
     assert cfg.bos_token_id == cfg.space_token_id + 1
