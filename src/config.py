@@ -3,7 +3,12 @@ from datetime import datetime
 from pathlib import Path
 import json
 from src.utils.logging import get_logger
+from dotenv import load_dotenv
+import os
 from typing import Literal
+
+load_dotenv()
+CIPHERS_DIR = os.environ["CIPHERS_DIR"]
 
 logger = get_logger(__name__)
 
@@ -175,7 +180,7 @@ class Config:
     save_step: int = 1000
 
     outputs_dir: Path = Path(__file__).parent.parent / "outputs"
-    data_dir: Path = Path(__file__).parent.parent.parent / "Ciphers"
+    data_dir: Path = Path(__file__).parent.parent.parent / CIPHERS_DIR
     homophone_file: str = "metadata.json"
 
     plain_vocab_size: int = 26

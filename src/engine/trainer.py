@@ -1,3 +1,4 @@
+import os
 import json
 from pathlib import Path
 from transformers import Trainer, TrainingArguments
@@ -158,18 +159,15 @@ class MambaTrainer:
             learning_rate=self.cfg.scheduler_config.learning_rate,
             lr_scheduler_type=self.cfg.scheduler_config.lr_scheduler_type,
             warmup_steps=self.cfg.scheduler_config.warmup_ratio,
-            # Optimization & Precision
             bf16=True,
             tf32=True,
             ddp_find_unused_parameters=False,
             optim="adamw_torch_fused",
             gradient_checkpointing=False,
-            # Eval & Logging
             eval_strategy="steps",
             eval_steps=self.cfg.save_step,
-            logging_steps=10,  # Hardcoded or from config
+            logging_steps=10,
             save_steps=self.cfg.save_step,
-            # Checkpointing
             save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model=self.best_metric,
@@ -213,21 +211,30 @@ class MambaTrainer:
     def _save_config(self, save_path: Path) -> None:
         """Serialize the current Config object to a JSON file.
 
+        Restricts file I/O operations to the main process (Rank 0) to prevent
+        race conditions in distributed training, and ensures target directory exists.
+
         Args:
             save_path (Path): Directory where the config JSON will be saved.
 
         """
-        config_dict = {
-            k: v for k, v in vars(self.cfg).items() if not k.startswith("__")
-        }
-        config_dict["max_len"] = self.cfg.max_len
-        config_dict["sep_token_id"] = self.cfg.sep_token_id
-        config_dict["space_token_id"] = self.cfg.space_token_id
-        config_dict["eos_token_id"] = self.cfg.eos_token_id
-        config_dict["bos_token_id"] = self.cfg.bos_token_id
-        config_dict["char_offset"] = self.cfg.char_offset
-        with open(save_path / "project_config.json", "w") as f:
-            json.dump(config_dict, f, indent=4, default=str)
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+
+        if local_rank == 0:
+            save_path.mkdir(parents=True, exist_ok=True)
+
+            config_dict = {
+                k: v for k, v in vars(self.cfg).items() if not k.startswith("__")
+            }
+            config_dict["max_len"] = self.cfg.max_len
+            config_dict["sep_token_id"] = self.cfg.sep_token_id
+            config_dict["space_token_id"] = self.cfg.space_token_id
+            config_dict["eos_token_id"] = self.cfg.eos_token_id
+            config_dict["bos_token_id"] = self.cfg.bos_token_id
+            config_dict["char_offset"] = self.cfg.char_offset
+
+            with open(save_path / "project_config.json", "w") as f:
+                json.dump(config_dict, f, indent=4, default=str)
 
     def _resolve_explicit_resume_path(self, resume_path: str) -> Path:
         """Resolve and validate an explicitly provided resume path.
