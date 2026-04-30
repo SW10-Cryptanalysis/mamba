@@ -3,12 +3,44 @@ from pathlib import Path
 from transformers import Trainer, TrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from src.models.mamba import get_model
+from src.models.mamba_mapping import get_mapping_model
 from src.data.dataset import CipherPlainData
 from src.data.pad_collator import PadCollator
 from src.config import Config
 from src.utils.logging import get_logger
+from transformers import EvalPrediction
+import numpy as np
 
 logger = get_logger(__name__)
+
+
+def compute_mapping_metrics(eval_pred: EvalPrediction) -> dict[str, float]:
+    """Calculate accuracy for the mapping classification task.
+
+    Args:
+        eval_pred (EvalPrediction): The evaluation prediction object.
+
+    Returns:
+        dict[str, float]: A dictionary containing the accuracy metric.
+
+    """
+    logits, labels = eval_pred.predictions, eval_pred.label_ids
+
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    if isinstance(labels, tuple):
+        labels = labels[0]
+
+    preds = np.argmax(logits, axis=-1).flatten()
+    labels = labels.flatten()
+
+    mask = labels != -100
+    valid_preds = preds[mask]
+    valid_labels = labels[mask]
+
+    if len(valid_labels) == 0:
+        return {"accuracy": 0.0}
+    return {"accuracy": float((valid_preds == valid_labels).mean())}
 
 
 class MambaTrainer:
@@ -61,13 +93,30 @@ class MambaTrainer:
             f"Fast Path is {mamba2_mod.is_fast_path_available}",
         )
         dataset_path = self.cfg.tokenized_dir
-        self.model = get_model(config.mamba_config)
+        dataset_path = self.cfg.tokenized_dir
+
+        if self.cfg.task == "mapping":
+            self.model = get_mapping_model(config.mamba_config)
+            self.compute_metrics = compute_mapping_metrics
+            self.best_metric = "eval_accuracy"
+            self.greater_is_better = True
+        elif self.cfg.task == "causal":
+            self.model = get_model(config.mamba_config)
+            self.compute_metrics = None
+            self.best_metric = "eval_loss"
+            self.greater_is_better = False
+        else:
+            raise ValueError(
+                f"Unknown task type: {self.cfg.task}. Use 'causal' or 'mapping'.",
+            )
+
         self.collator = PadCollator(pad_token_id=config.pad_token_id)
         self.train_ds = CipherPlainData(dataset_path, split="Training")
         self.eval_ds = CipherPlainData(dataset_path, split="Validation")
+
         self.trainer = self._setup_trainer()
 
-    def _inject_mamba2_kernels(self) -> None: # pragma: no cover
+    def _inject_mamba2_kernels(self) -> None:  # pragma: no cover
         """Force-injects Mamba2 CUDA kernels."""
         try:
             import transformers.models.mamba2.modeling_mamba2 as mamba2_mod
@@ -123,8 +172,8 @@ class MambaTrainer:
             # Checkpointing
             save_total_limit=2,
             load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
+            metric_for_best_model=self.best_metric,
+            greater_is_better=self.greater_is_better,
             dataloader_num_workers=4,
             dataloader_pin_memory=True,
         )
@@ -135,6 +184,7 @@ class MambaTrainer:
             train_dataset=self.train_ds,
             eval_dataset=self.eval_ds,
             data_collator=self.collator,
+            compute_metrics=self.compute_metrics,
         )
 
     def _load_config(self, current_config: Config, checkpoint_path: str) -> Config:
@@ -174,6 +224,7 @@ class MambaTrainer:
         config_dict["sep_token_id"] = self.cfg.sep_token_id
         config_dict["space_token_id"] = self.cfg.space_token_id
         config_dict["eos_token_id"] = self.cfg.eos_token_id
+        config_dict["bos_token_id"] = self.cfg.bos_token_id
         config_dict["char_offset"] = self.cfg.char_offset
         with open(save_path / "project_config.json", "w") as f:
             json.dump(config_dict, f, indent=4, default=str)

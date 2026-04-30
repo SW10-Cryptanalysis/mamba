@@ -3,11 +3,13 @@ from datetime import datetime
 from pathlib import Path
 import json
 from src.utils.logging import get_logger
+from typing import Literal
 
 logger = get_logger(__name__)
 
 BASE_SEQ_LEN_NORMAL = 10063
 BASE_SEQ_LEN_SPACES = 13077
+
 
 @dataclass
 class MambaConfig:
@@ -68,12 +70,13 @@ class MambaConfig:
     head_dim: int = 64
     vocab_size: int = field(init=False)
     hidden_size: int = 1024
-    state_size: int = 64
+    state_size: int = 48
     num_hidden_layers: int = 8
     layer_norm_epsilon: float = 1e-5
     pad_token_id: int = field(init=False)
     sep_token_id: int = field(init=False)
     eos_token_id: int = field(init=False)
+    bos_token_id: int = field(init=False)
     expand: int = 1
     conv_kernel: int = 4
     n_groups: int = 8
@@ -161,6 +164,7 @@ class Config:
 
     """
 
+    task: Literal["causal", "mapping"] = "causal"
     use_spaces: bool = False
     device: str = "cuda"
 
@@ -208,20 +212,22 @@ class Config:
     def tokenized_dir(self) -> Path:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaced" if self.use_spaces else "normal"
+        suffix += "_mapping" if self.task == "mapping" else ""
         return self.data_dir / f"tokenized_{suffix}"
 
     @property
     def max_len(self) -> int:
         """Max len based on with or without spaces."""
-        return (
-            BASE_SEQ_LEN_SPACES * 2 + 3 + self.buffer if self.use_spaces
-            else BASE_SEQ_LEN_NORMAL * 2 + 3 + self.buffer
-        )
+        base = BASE_SEQ_LEN_SPACES if self.use_spaces else BASE_SEQ_LEN_NORMAL
+        if self.task == "mapping":
+            return base + 2 + self.buffer
+        return base * 2 + 3 + self.buffer
 
     @property
     def save_path(self) -> Path:
         """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
         mode = "spaces" if self.use_spaces else "normal"
+        mode += "_mapping" if self.task == "mapping" else ""
         return self.outputs_dir / f"{mode}_{self._timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:
@@ -244,6 +250,7 @@ class Config:
         )
         self.mamba_config.sep_token_id = self.sep_token_id
         self.mamba_config.eos_token_id = self.eos_token_id
+        self.mamba_config.bos_token_id = self.bos_token_id
         self.mamba_config.pad_token_id = self.pad_token_id
 
     def __post_init__(self) -> None:
