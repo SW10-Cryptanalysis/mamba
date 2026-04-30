@@ -1,5 +1,9 @@
 import sys
 from unittest.mock import MagicMock
+import os
+
+# Mock environment variables
+os.environ["CIPHERS_DIR"] = "test/data"
 
 # Mock mamba & causalconv1d modules for testing
 
