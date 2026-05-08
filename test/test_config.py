@@ -17,6 +17,7 @@ class SuccessTestCase:
 
     task: Literal["causal", "mapping"]
     use_spaces: bool
+    truncated: bool
     mock_json: str
     expected_suffix: str
     expected_unique: int
@@ -44,6 +45,7 @@ class FailureTestCase:
         SuccessTestCase(
             task="causal",
             use_spaces=False,
+            truncated=False,
             mock_json='{"max_symbol_id": 100}',
             expected_suffix="normal",
             expected_unique=100,
@@ -56,8 +58,24 @@ class FailureTestCase:
             expected_save_mode="normal",
         ),
         SuccessTestCase(
+            task="causal",
+            use_spaces=False,
+            truncated=True,
+            mock_json='{"max_symbol_id": 100}',
+            expected_suffix="normal_truncated_4000",
+            expected_unique=100,
+            expected_sep_token_id=101,
+            expected_eos_token_id=104,
+            expected_bos_token_id=103,
+            expected_pad_token_id=0,
+            expected_vocab_size=141,
+            expected_max_len=BASE_SEQ_LEN_NORMAL * 2 + 3 + 10,
+            expected_save_mode="normal_truncated_4000",
+        ),
+        SuccessTestCase(
             task="mapping",
             use_spaces=True,
+            truncated=False,
             mock_json='{"max_symbol_id": 2503}',
             expected_suffix="spaced_mapping",
             expected_unique=2503,
@@ -76,7 +94,7 @@ def test_config_initialization_success(tc: SuccessTestCase, mocker: Any) -> None
     """Verifies successful loading of properties, dynamic vocabulary sizing, and paths."""
     mocker.patch("builtins.open", mocker.mock_open(read_data=tc.mock_json))
 
-    cfg = Config(use_spaces=tc.use_spaces, task=tc.task)
+    cfg = Config(use_spaces=tc.use_spaces, task=tc.task, truncated=tc.truncated)
 
     assert tc.expected_suffix in str(cfg.tokenized_dir)
     assert cfg.unique_homophones == tc.expected_unique

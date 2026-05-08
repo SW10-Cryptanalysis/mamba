@@ -171,6 +171,7 @@ class Config:
 
     task: Literal["causal", "mapping"] = "causal"
     use_spaces: bool = False
+    truncated: bool = False
     device: str = "cuda"
 
     mamba_config: MambaConfig = field(default_factory=MambaConfig)
@@ -218,6 +219,7 @@ class Config:
         """Dynamic path based on whether we use spaces or not."""
         suffix = "spaced" if self.use_spaces else "normal"
         suffix += "_mapping" if self.task == "mapping" else ""
+        suffix += "_truncated_4000" if self.truncated else ""
         return self.data_dir / f"tokenized_{suffix}"
 
     @property
@@ -233,6 +235,7 @@ class Config:
         """Dynamic outputs dir based on timestamp and whether we use spaces or not."""
         mode = "spaces" if self.use_spaces else "normal"
         mode += "_mapping" if self.task == "mapping" else ""
+        mode += "_truncated_4000" if self.truncated else ""
         return self.outputs_dir / f"{mode}_{self._timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:
