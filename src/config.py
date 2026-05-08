@@ -178,7 +178,7 @@ class Config:
     scheduler_config: CosineSchedulerConfig = field(
         default_factory=CosineSchedulerConfig,
     )
-    save_step: int = 1000
+    save_step: int = 100000
 
     outputs_dir: Path = Path(__file__).parent.parent / "outputs"
     data_dir: Path = Path(__file__).parent.parent.parent / CIPHERS_DIR
