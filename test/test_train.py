@@ -12,13 +12,14 @@ class TestTrainScript:
         mock_args.spaces = True
         mock_args.task = "causal"
         mock_args.resume = True
+        mock_args.truncated = False
         mock_parse_args.return_value = mock_args
 
         mock_config_instance = mock_config_cls.return_value
 
         main()
 
-        mock_config_cls.assert_called_once_with(use_spaces=True, task="causal")
+        mock_config_cls.assert_called_once_with(use_spaces=True, task="causal", truncated=False)
 
         mock_config_instance.load_homophones.assert_called_once()
 

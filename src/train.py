@@ -33,6 +33,7 @@ def main() -> None:
     config = Config(
         use_spaces=cmd_args.spaces,
         task=cmd_args.task,
+        truncated=cmd_args.truncated,
     )
     config.load_homophones()
 
