@@ -166,7 +166,7 @@ class MambaTrainer:
             gradient_checkpointing=False,
             eval_strategy="steps",
             eval_steps=self.cfg.save_step,
-            logging_steps=10,
+            logging_steps=50000,
             save_steps=self.cfg.save_step,
             save_total_limit=2,
             load_best_model_at_end=True,
