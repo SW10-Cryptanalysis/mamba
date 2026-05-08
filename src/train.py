@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
         default="causal",
         help="The task to train on",
     )
+    parser.add_argument("--truncated", action="store_true")
     return parser.parse_args()
 
 
