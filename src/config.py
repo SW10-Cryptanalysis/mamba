@@ -172,6 +172,7 @@ class Config:
     task: Literal["causal", "mapping"] = "causal"
     use_spaces: bool = False
     truncated: bool = False
+    mono: bool = False
     device: str = "cuda"
 
     mamba_config: MambaConfig = field(default_factory=MambaConfig)
@@ -220,6 +221,7 @@ class Config:
         suffix = "spaced" if self.use_spaces else "normal"
         suffix += "_mapping" if self.task == "mapping" else ""
         suffix += "_truncated_4000" if self.truncated else ""
+        suffix += "_monoalphabetic" if self.mono else ""
         return self.data_dir / f"tokenized_{suffix}"
 
     @property
@@ -236,6 +238,7 @@ class Config:
         mode = "spaces" if self.use_spaces else "normal"
         mode += "_mapping" if self.task == "mapping" else ""
         mode += "_truncated_4000" if self.truncated else ""
+        mode += "_mono" if self.mono else ""
         return self.outputs_dir / f"{mode}_{self._timestamp}"
 
     def load_homophones(self, homophone_file: str = "metadata.json") -> None:
