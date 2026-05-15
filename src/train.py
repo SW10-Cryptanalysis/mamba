@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
         help="The task to train on",
     )
     parser.add_argument("--truncated", action="store_true")
+    parser.add_argument("--mono", action="store_true")
     return parser.parse_args()
 
 
@@ -34,6 +35,7 @@ def main() -> None:
         use_spaces=cmd_args.spaces,
         task=cmd_args.task,
         truncated=cmd_args.truncated,
+        mono=cmd_args.mono,
     )
     config.load_homophones()
 
